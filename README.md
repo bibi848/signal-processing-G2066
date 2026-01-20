@@ -25,15 +25,15 @@ Clone repository through VSCode.
 
 Each collaborator has their own branch named in the format:
 
-    `feature-<name>`
+    feature-<name>
 
 For example:
 
-    `feature-oscar`
+    feature-oscar
 
 To see all branches in the repository, run:
 
-    `git branch -a`
+    git branch -a
 
 This will list both local and remote branches.
 
@@ -43,11 +43,11 @@ This will list both local and remote branches.
 
 Once you know the name of your branch, switch to it using:
 
-    `git switch feature-<your-name>`
+    git switch feature-<your-name>
 
 Example:
 
-    `git switch feature-oscar`
+    git switch feature-oscar
 
 After switching, all changes you make will be saved to your own branch, not `main`.
 
@@ -74,8 +74,8 @@ When your work is ready:
 
 When you have downloaded the correct python version, ensure that it is selected in the terminal and then run:
 
-    `python -m venv .venv`
+    python -m venv .venv
 
 And then download all libraries using:
 
-    `pip install -r requirements.txt`
+    pip install -r requirements.txt
