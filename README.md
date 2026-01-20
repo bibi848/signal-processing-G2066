@@ -79,3 +79,13 @@ When you have downloaded the correct python version, ensure that it is selected 
 And then download all libraries using:
 
     pip install -r requirements.txt
+
+--- 
+
+### 7. Merging from and to main
+
+When working on this repository, please work in your dedicated branch. You can get the most up-to-date main branch by running:
+
+    git merge main
+
+in your branch. When you would like to upload your work to the main branch, commit and push your staged changes as you would normally. The changes will appear on the web version of GitHub where we can evaluate the pull request. This ensures that there are no large clashes when uploading lots of work. 
