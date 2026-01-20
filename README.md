@@ -17,12 +17,7 @@ This repository is set up so that each collaborator works on their own branch, r
 
 ### 1. Cloning the repository
 
-To get a copy of the repository on your computer, run:
-
-    git clone <repository-url>
-    cd <repository-folder-name>
-
-When you first clone the repository, you will be on the `main` branch by default.
+Clone repository through VSCode. 
 
 ---
 
@@ -30,15 +25,15 @@ When you first clone the repository, you will be on the `main` branch by default
 
 Each collaborator has their own branch named in the format:
 
-    feature-<name>
+    `feature-<name>`
 
 For example:
 
-    feature-oscar
+    `feature-oscar`
 
 To see all branches in the repository, run:
 
-    git branch -a
+    `git branch -a`
 
 This will list both local and remote branches.
 
@@ -48,11 +43,11 @@ This will list both local and remote branches.
 
 Once you know the name of your branch, switch to it using:
 
-    git switch feature-<your-name>
+    `git switch feature-<your-name>`
 
 Example:
 
-    git switch feature-oscar
+    `git switch feature-oscar`
 
 After switching, all changes you make will be saved to your own branch, not `main`.
 
@@ -80,15 +75,3 @@ When your work is ready:
 3. Another group member will review and merge your changes
 
 ---
-
-### Useful commands
-
-Check which branch you are currently on:
-
-    git branch
-
-View all branches:
-
-    git branch -a
-
-The branch marked with `*` is your current branch.
