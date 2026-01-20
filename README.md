@@ -57,12 +57,6 @@ After switching, all changes you make will be saved to your own branch, not `mai
 
 You can now edit files, run code, and add new content.
 
-To save your work:
-
-    git add .
-    git commit -m "Brief description of your changes"
-    git push
-
 ---
 
 ### 5. Merging your work into `main`
@@ -75,3 +69,13 @@ When your work is ready:
 3. Another group member will review and merge your changes
 
 ---
+
+### 6. Creating a virtual environment
+
+When you have downloaded the correct python version, ensure that it is selected in the terminal and then run:
+
+    `python -m venv .venv`
+
+And then download all libraries using:
+
+    `pip install -r requirements.txt`
