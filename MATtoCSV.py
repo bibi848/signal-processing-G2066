@@ -12,7 +12,7 @@ import os
 
 # Point the script to the correct subfolder.
 raw_data_type       = '1D Raw Data'
-raw_data_name       = 'Initial Aluminium Data'
+raw_data_name       = 'Al Pure 15MHz 26012026'
 processed_data_type = '1D Processed Data'
 cwd                 = os.getcwd()
 display_picture     = 'y' # y/n
@@ -149,6 +149,8 @@ for file in mat_files:
         plt.ylabel("Receiver Number")
         plt.colorbar(label="Intensity")
         plt.tight_layout()
+        out_name = os.path.splitext(file)[0] + ".png"
+        plt.savefig(os.path.join(OUT_DIR, out_name), dpi=300, bbox_inches='tight')
         plt.show()
 
     print()
