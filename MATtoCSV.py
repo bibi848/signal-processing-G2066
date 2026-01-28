@@ -12,7 +12,7 @@ import os
 
 # Point the script to the correct subfolder.
 raw_data_type       = '1D Raw Data'
-raw_data_name       = 'Al Pure 15MHz 26012026'
+raw_data_name       = 'Al Hole 5MHz 28012026'
 processed_data_type = '1D Processed Data'
 cwd                 = os.getcwd()
 display_picture     = 'y' # y/n
