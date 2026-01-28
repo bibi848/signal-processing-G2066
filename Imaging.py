@@ -13,17 +13,19 @@ from Classes.TFM1D import TFM1D
 
 # Point the script to the correct subfolder.
 input_data_folder    = '1D Processed Data'
-input_data_subfolder = 'Al Hole 5MHz 26012026'
+input_data_subfolder = 'Al Hole 5MHz 28012026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
 display_picture      = 'y' # y/n
+save_picture         = 'y' # y/n
+all_pictures         = 'y' # y/n  
 
 # Image Parameters
 c = 6320 # m/s
 
 # Input and Output paths.
-IN_DIR  = os.path.join(cwd, input_data_folder, input_data_subfolder)
-OUT_DIR = os.path.join(cwd, output_data_folder, input_data_subfolder)
+IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, input_data_subfolder)
+OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, input_data_subfolder)
 
 # Find all files in directory which are .xlsx files. 
 xlsx_files = [
@@ -68,7 +70,7 @@ for file in xlsx_files:
             img,
             extent=[x_img[0]*1e3, x_img[-1]*1e3, z_img[-1]*1e3, z_img[0]*1e3],
             aspect="auto",
-            cmap="hot"
+            cmap="viridis"
         )
         plt.xlabel("x [mm]")
         plt.ylabel("z [mm]")
@@ -76,15 +78,20 @@ for file in xlsx_files:
         plt.title(file)
         plt.tight_layout()
         out_name = os.path.splitext(file)[0] + "_TFM.png"
-        plt.savefig(os.path.join(OUT_DIR, out_name), dpi=300, bbox_inches='tight')
+        if save_picture == 'y':
+            plt.savefig(os.path.join(OUT_DIR, out_name), dpi=300, bbox_inches='tight')
         plt.show()
     
     # Save Clean File
-    out_name = os.path.splitext(file)[0] + "_TFM_clean.png"
-    plt.imsave(
-        os.path.join(OUT_DIR, out_name),
-        img,
-        cmap="hot"
-    )
+    if save_picture == 'y':
+        out_name = os.path.splitext(file)[0] + "_TFM_clean.png"
+        plt.imsave(
+            os.path.join(OUT_DIR, out_name),
+            img,
+            cmap="viridis"
+        )
+
+    if all_pictures == 'n':
+        break
 
 #%%
