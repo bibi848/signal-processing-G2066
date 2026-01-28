@@ -18,8 +18,8 @@ cwd                 = os.getcwd()
 display_picture     = 'y' # y/n
 
 # Input and Output paths.
-IN_DIR  = os.path.join(cwd, raw_data_type, raw_data_name)
-OUT_DIR = os.path.join(cwd, processed_data_type, raw_data_name)
+IN_DIR  = os.path.join(cwd, 'DATA', raw_data_type, raw_data_name)
+OUT_DIR = os.path.join(cwd, 'DATA', processed_data_type, raw_data_name)
 
 # Find all files in directory which are .mat files. 
 mat_files = [
