@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import os
+import sys
+import time
 
 from Classes.TFM1D import TFM1D
 
@@ -17,8 +19,9 @@ input_data_subfolder = 'Al Hole 5MHz 28012026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
 display_picture      = 'y' # y/n
-save_picture         = 'y' # y/n
-all_pictures         = 'y' # y/n  
+save_picture         = 'n' # y/n
+all_pictures         = 'n' # y/n
+engine               = 'python' # python/cpp
 
 # Image Parameters
 c = 6320 # m/s
@@ -38,6 +41,15 @@ print('Files available in directory:')
 print(xlsx_files)
 print()
 
+if engine == 'cpp':
+    build_dir = os.path.join(
+        os.path.dirname(__file__),
+        "build", "CPP", "TFM", "Debug"
+    )
+    sys.path.insert(0, build_dir)
+    import tfm_cpp
+
+
 #%%
 # Looping over available files
 for file in xlsx_files:
@@ -48,7 +60,7 @@ for file in xlsx_files:
     # Extract Data
     metadata  = pd.read_excel(file_path, "Metadata")
     time_data = pd.read_excel(file_path, "Time_Data").values
-    time      = pd.read_excel(file_path, "Time")["time_seconds"].values
+    time_sec  = pd.read_excel(file_path, "Time")["time_seconds"].values
     tx_rx     = pd.read_excel(file_path, "tx_rx")
     geometry  = pd.read_excel(file_path, "Array_Geometry")
 
@@ -62,7 +74,18 @@ for file in xlsx_files:
     z_img = np.linspace(0e-3, 40e-3, 300)
 
     # TFM
-    img = TFM1D(time_data, time, tx, rx, xc, zc, c, x_img, z_img)
+    if engine == 'python':
+        start_time = time.time()
+        img = TFM1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img)
+        end_time = time.time()
+
+    elif engine == 'cpp':
+        start_time = time.time()
+        tx0 = tx - 1
+        rx0 = rx - 1
+        X, Z = np.meshgrid(x_img, z_img)
+        img = tfm_cpp.tfm1D(time_data, time_sec, tx0, rx0, xc, zc, X, Z, c)
+        end_time = time.time()
 
     if display_picture == 'y':
         plt.figure(figsize=(6, 8))
@@ -90,6 +113,8 @@ for file in xlsx_files:
             img,
             cmap="viridis"
         )
+    
+    print(end_time - start_time)
 
     if all_pictures == 'n':
         break
