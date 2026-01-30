@@ -1,5 +1,5 @@
 '''
-This script converts the .xlsx files processed previously into TFM images. 
+This script converts the 2D array .xlsx files processed previously into 3D TFM images. 
 '''
 
 #%%
@@ -11,17 +11,22 @@ import os
 import sys
 import time
 
-from Classes.TFM1D import TFM1D
+build_dir = os.path.join(
+    os.path.dirname(__file__),
+    "build", "CPP", "TFM", "Debug"
+)
+sys.path.insert(0, build_dir)
+
+import tfm_cpp
 
 # Point the script to the correct subfolder.
-input_data_folder    = '1D Processed Data'
-input_data_subfolder = 'Al Hole 5MHz 28012026'
-output_data_folder   = '1D TFM Data'
+input_data_folder    = '2D Processed Data'
+input_data_subfolder = 'Al Hole 3MHz 28012026'
+output_data_folder   = '2D TFM Data'
 cwd                  = os.getcwd()
 display_picture      = 'y' # y/n
 save_picture         = 'n' # y/n
 all_pictures         = 'n' # y/n
-engine               = 'cpp' # python/cpp
 
 # Image Parameters
 c = 6320 # m/s
@@ -40,14 +45,6 @@ xlsx_files = [
 print('Files available in directory:')
 print(xlsx_files)
 print()
-
-if engine == 'cpp':
-    build_dir = os.path.join(
-        os.path.dirname(__file__),
-        "build", "CPP", "TFM", "Debug"
-    )
-    sys.path.insert(0, build_dir)
-    import tfm_cpp
 
 
 #%%
@@ -68,30 +65,37 @@ for file in xlsx_files:
     rx = tx_rx["rx"].values.astype(int)
 
     xc = geometry["el_xc"].values
+    yc = geometry["el_yc"].values
     zc = geometry["el_zc"].values
 
+    # Image grid
     x_img = np.linspace(xc.min(), xc.max(), 200)
+    y_img = np.linspace(yc.min(), yc.max(), 200)
     z_img = np.linspace(0e-3, 40e-3, 300)
+    tx0 = tx - 1
+    rx0 = rx - 1
 
-    # TFM
-    if engine == 'python':
-        start_time = time.time()
-        img = TFM1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img)
-        end_time = time.time()
+    Z, Y, X = np.meshgrid(z_img, y_img, x_img, indexing="ij")
 
-    elif engine == 'cpp':
-        start_time = time.time()
-        tx0 = tx - 1
-        rx0 = rx - 1
-        X, Z = np.meshgrid(x_img, z_img)
-        img = tfm_cpp.tfm1D(time_data, time_sec, tx0, rx0, xc, zc, X, Z, c)
-        end_time = time.time()
+    print('Here')
+    start_time = time.time()
+    img = tfm_cpp.tfm2D(time_data, time_sec, tx0, rx0, xc, yc, zc, X, Y, Z, c)
+    end_time = time.time()
+    print("TFM time:", end_time - start_time)
+
+    iy = Y.shape[1] // 2
+    img_xz = img[:, iy, :]
 
     if display_picture == 'y':
         plt.figure(figsize=(6, 8))
         plt.imshow(
-            img,
-            extent=[x_img[0]*1e3, x_img[-1]*1e3, z_img[-1]*1e3, z_img[0]*1e3],
+            img_xz,
+            extent=[
+                x_img[0] * 1e3,
+                x_img[-1] * 1e3,
+                z_img[-1] * 1e3,
+                z_img[0] * 1e3
+            ],
             aspect="auto",
             cmap="viridis"
         )
@@ -100,23 +104,25 @@ for file in xlsx_files:
         plt.colorbar(label="Amplitude")
         plt.title(file)
         plt.tight_layout()
-        out_name = os.path.splitext(file)[0] + "_TFM.png"
+
         if save_picture == 'y':
-            plt.savefig(os.path.join(OUT_DIR, out_name), dpi=300, bbox_inches='tight')
+            out_name = os.path.splitext(file)[0] + "_TFM.png"
+            plt.savefig(
+                os.path.join(OUT_DIR, out_name),
+                dpi=300,
+                bbox_inches="tight"
+            )
+
         plt.show()
-    
-    # Save Clean File
+
+    # Save clean image (same slice)
     if save_picture == 'y':
         out_name = os.path.splitext(file)[0] + "_TFM_clean.png"
         plt.imsave(
             os.path.join(OUT_DIR, out_name),
-            img,
+            img_xz,
             cmap="viridis"
         )
-    
-    print(end_time - start_time)
 
     if all_pictures == 'n':
         break
-
-#%%
