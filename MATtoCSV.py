@@ -11,9 +11,9 @@ import h5py
 import os
 
 # Point the script to the correct subfolder.
-raw_data_type       = '1D Raw Data'
-raw_data_name       = 'Al Hole 5MHz 28012026'
-processed_data_type = '1D Processed Data'
+raw_data_type       = '2D Raw Data'
+raw_data_name       = 'Al Hole 3MHz 28012026'
+processed_data_type = '2D Processed Data'
 cwd                 = os.getcwd()
 display_picture     = 'y' # y/n
 
