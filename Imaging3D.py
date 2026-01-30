@@ -24,9 +24,9 @@ input_data_folder    = '2D Processed Data'
 input_data_subfolder = 'Al Hole 3MHz 28012026'
 output_data_folder   = '2D TFM Data'
 cwd                  = os.getcwd()
-display_picture      = 'y' # y/n
-save_picture         = 'n' # y/n
-all_pictures         = 'n' # y/n
+display_picture      = 'n' # y/n
+save_picture         = 'y' # y/n
+all_pictures         = 'y' # y/n
 
 # Image Parameters
 c = 6320 # m/s
@@ -77,51 +77,18 @@ for file in xlsx_files:
 
     Z, Y, X = np.meshgrid(z_img, y_img, x_img, indexing="ij")
 
-    print('Here')
+    print('Starting TFM')
     start_time = time.time()
     img = tfm_cpp.tfm2D(time_data, time_sec, tx0, rx0, xc, yc, zc, X, Y, Z, c)
     end_time = time.time()
     print("TFM time:", end_time - start_time)
+    print()
 
-    iy = Y.shape[1] // 2
-    img_xz = img[:, iy, :]
-
-    if display_picture == 'y':
-        plt.figure(figsize=(6, 8))
-        plt.imshow(
-            img_xz,
-            extent=[
-                x_img[0] * 1e3,
-                x_img[-1] * 1e3,
-                z_img[-1] * 1e3,
-                z_img[0] * 1e3
-            ],
-            aspect="auto",
-            cmap="viridis"
-        )
-        plt.xlabel("x [mm]")
-        plt.ylabel("z [mm]")
-        plt.colorbar(label="Amplitude")
-        plt.title(file)
-        plt.tight_layout()
-
-        if save_picture == 'y':
-            out_name = os.path.splitext(file)[0] + "_TFM.png"
-            plt.savefig(
-                os.path.join(OUT_DIR, out_name),
-                dpi=300,
-                bbox_inches="tight"
-            )
-
-        plt.show()
-
-    # Save clean image (same slice)
     if save_picture == 'y':
-        out_name = os.path.splitext(file)[0] + "_TFM_clean.png"
-        plt.imsave(
+        out_name = os.path.splitext(file)[0] + "_TFM_3D.npy"
+        np.save(
             os.path.join(OUT_DIR, out_name),
-            img_xz,
-            cmap="viridis"
+            img
         )
 
     if all_pictures == 'n':
