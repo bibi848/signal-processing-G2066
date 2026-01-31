@@ -18,10 +18,11 @@ input_data_folder    = '1D Processed Data'
 input_data_subfolder = 'Al Hole 5MHz 28012026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
-display_picture      = 'y' # y/n
-save_picture         = 'n' # y/n
-all_pictures         = 'n' # y/n
-engine               = 'cpp' # python/cpp
+display_picture      = False  
+save_picture         = False 
+all_pictures         = True
+engine               = 'gpu'    # python/cpp/gpu
+osys                 = 'ubuntu' # windows/ubuntu, choose windows if on mac
 
 # Image Parameters
 c = 6320 # m/s
@@ -29,8 +30,9 @@ c = 6320 # m/s
 # Input and Output paths.
 IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, input_data_subfolder)
 OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, input_data_subfolder)
+os.makedirs(OUT_DIR, exist_ok=True)
 
-# Find all files in directory which are .xlsx files. 
+# Find all files in directory which are .xlsx files.
 xlsx_files = [
     f for f in os.listdir(IN_DIR)
     if f.lower().endswith(".xlsx")
@@ -41,13 +43,31 @@ print('Files available in directory:')
 print(xlsx_files)
 print()
 
+# Import module
 if engine == 'cpp':
-    build_dir = os.path.join(
-        os.path.dirname(__file__),
-        "build", "CPP", "TFM", "Debug"
-    )
+    if osys == 'windows':
+        build_dir = os.path.join(
+            os.path.dirname(__file__),
+            "build", "CPP", "TFM", "Debug"
+        )
+    elif osys == 'ubuntu':
+        build_dir = os.path.join(
+            os.path.dirname(__file__),
+            "build", "CPP", "TFM"
+        )
     sys.path.insert(0, build_dir)
     import tfm_cpp
+    print('CPP Available')
+
+elif engine == 'gpu':
+    build_dir = os.path.join(
+        os.path.dirname(__file__),
+        "build", "CPP", "TFM_GPU"
+    )
+    sys.path.insert(0, build_dir)
+    import tfm_gpu
+    print('GPU Available')
+    print()
 
 
 #%%
@@ -73,11 +93,12 @@ for file in xlsx_files:
     x_img = np.linspace(xc.min(), xc.max(), 200)
     z_img = np.linspace(0e-3, 40e-3, 300)
 
-    # TFM
+    # TFM computation
     if engine == 'python':
         start_time = time.time()
         img = TFM1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img)
         end_time = time.time()
+        print(f"Python execution time: {end_time - start_time:.6f}")
 
     elif engine == 'cpp':
         start_time = time.time()
@@ -86,8 +107,19 @@ for file in xlsx_files:
         X, Z = np.meshgrid(x_img, z_img)
         img = tfm_cpp.tfm1D(time_data, time_sec, tx0, rx0, xc, zc, X, Z, c)
         end_time = time.time()
+        print(f"CPP execution time: {end_time - start_time:.6f}")
+        
+    elif engine == 'gpu':
+        start_time = time.time()
+        tx0 = tx - 1
+        rx0 = rx - 1
+        X, Z = np.meshgrid(x_img, z_img)
+        img = tfm_gpu.tfm1D_GPU(time_data, time_sec, tx0, rx0, xc, zc, X, Z, c)
+        end_time = time.time()
+        print(f"GPU ROCm execution time: {end_time - start_time:.6f}")
 
-    if display_picture == 'y':
+    # Display picture
+    if display_picture:
         plt.figure(figsize=(6, 8))
         plt.imshow(
             img,
@@ -100,23 +132,25 @@ for file in xlsx_files:
         plt.colorbar(label="Amplitude")
         plt.title(file)
         plt.tight_layout()
-        out_name = os.path.splitext(file)[0] + "_TFM.png"
-        if save_picture == 'y':
+        
+        if save_picture:
+            out_name = os.path.splitext(file)[0] + "_TFM.png"
             plt.savefig(os.path.join(OUT_DIR, out_name), dpi=300, bbox_inches='tight')
+        
         plt.show()
     
-    # Save Clean File
-    if save_picture == 'y':
+    # Save clean file
+    if save_picture:
         out_name = os.path.splitext(file)[0] + "_TFM_clean.png"
         plt.imsave(
             os.path.join(OUT_DIR, out_name),
             img,
             cmap="viridis"
         )
-    
-    print(end_time - start_time)
 
-    if all_pictures == 'n':
+    if not all_pictures:
         break
+
+    print()
 
 #%%

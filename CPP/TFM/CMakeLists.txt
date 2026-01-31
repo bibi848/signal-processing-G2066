@@ -3,12 +3,11 @@ pybind11_add_module(tfm_cpp
     bindings.cpp
 )
 
+target_link_libraries(tfm_cpp PRIVATE OpenMP::OpenMP_CXX)
+
 target_include_directories(tfm_cpp
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_link_libraries(tfm_cpp
-    PRIVATE
-        OpenMP::OpenMP_CXX
-)
+message(STATUS "Building TFM CPU version (Windows/Linux OpenMP)")
