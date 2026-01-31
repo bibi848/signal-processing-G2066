@@ -7,6 +7,7 @@ pip install -U napari[pyqt5]
 python Display3DData.py
 
 In your terminal (one by one) worked for me. 
+Linux: export QT_QPA_PLATFORM=xcb
 '''
 
 import numpy as np

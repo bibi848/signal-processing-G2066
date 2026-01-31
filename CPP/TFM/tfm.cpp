@@ -1,7 +1,6 @@
 #include "tfm.h"
 #include <cmath>
 #include <omp.h>
-#include <cstdio>
 
 void tfm1D(
     const double* time_data,
@@ -57,9 +56,6 @@ void tfm1D(
         img[p] = acc;
     }
 }
-
-#include <omp.h>
-#include <cmath>
 
 void tfm2D(
     const double* time_data,

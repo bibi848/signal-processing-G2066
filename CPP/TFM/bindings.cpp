@@ -109,11 +109,11 @@ PYBIND11_MODULE(tfm_cpp, m)
     m.def(
         "tfm1D",
         &tfm1D_bind,
-        "1D TFM"
+        "1D TFM (CPU/OpenMP)"
     );
     m.def(
         "tfm2D",
         &tfm2D_bind,
-        "2D TFM"
+        "2D TFM (CPU/OpenMP)"
     );
 }
