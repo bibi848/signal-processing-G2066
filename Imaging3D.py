@@ -11,29 +11,23 @@ import os
 import sys
 import time
 
-build_dir = os.path.join(
-    os.path.dirname(__file__),
-    "build", "CPP", "TFM", "Debug"
-)
-sys.path.insert(0, build_dir)
-
-import tfm_cpp
-
 # Point the script to the correct subfolder.
 input_data_folder    = '2D Processed Data'
 input_data_subfolder = 'Al Hole 3MHz 28012026'
 output_data_folder   = '2D TFM Data'
 cwd                  = os.getcwd()
-display_picture      = 'n' # y/n
-save_picture         = 'y' # y/n
-all_pictures         = 'y' # y/n
+save_picture         = True
+all_pictures         = True
+engine               = 'gpu' # cpp / gpu
+threads              = 512
 
-# Image Parameters
+# Parameters
 c = 6320 # m/s
 
 # Input and Output paths.
 IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, input_data_subfolder)
 OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, input_data_subfolder)
+os.makedirs(OUT_DIR, exist_ok=True)
 
 # Find all files in directory which are .xlsx files. 
 xlsx_files = [
@@ -46,12 +40,33 @@ print('Files available in directory:')
 print(xlsx_files)
 print()
 
+# Import the appropriate module
+if engine == 'cpp':
+    import platform
+    if platform.system() == 'Windows':
+        build_dir = os.path.join(os.path.dirname(__file__), "build", "CPP", "TFM", "Debug")
+    else:
+        build_dir = os.path.join(os.path.dirname(__file__), "build", "CPP", "TFM")
+    sys.path.insert(0, build_dir)
+    import tfm_cpp
+    print('CPP Setup Successful')
+    print()
+
+
+elif engine == 'gpu':
+    build_dir = os.path.join(os.path.dirname(__file__), "build", "CPP", "TFM_GPU")
+    sys.path.insert(0, build_dir)
+    import tfm_gpu
+    print('GPU Setup Successful')
+    print()
+
 
 #%%
 # Looping over available files
 for file in xlsx_files:
     print('Processing', file)
 
+    s = time.time()
     file_path = os.path.join(IN_DIR, file)
 
     # Extract Data
@@ -76,20 +91,32 @@ for file in xlsx_files:
     rx0 = rx - 1
 
     Z, Y, X = np.meshgrid(z_img, y_img, x_img, indexing="ij")
-
-    print('Starting TFM')
-    start_time = time.time()
-    img = tfm_cpp.tfm2D(time_data, time_sec, tx0, rx0, xc, yc, zc, X, Y, Z, c)
-    end_time = time.time()
-    print("TFM time:", end_time - start_time)
+    e = time.time()
+    print(f"Data Setup Time: {e - s:.3f}s")
     print()
 
-    if save_picture == 'y':
-        out_name = os.path.splitext(file)[0] + "_TFM_3D.npy"
+    # TFM computation
+    print('Starting TFM')
+    if engine == 'cpp':
+        start_time = time.time()
+        img = tfm_cpp.tfm2D(time_data, time_sec, tx0, rx0, xc, yc, zc, X, Y, Z, c)
+        end_time = time.time()
+        print(f"CPP TFM time: {end_time - start_time:.3f}s")
+
+    elif engine == 'gpu':
+        start_time = time.time()
+        img = tfm_gpu.tfm2D_GPU(time_data, time_sec, tx0, rx0, xc, yc, zc, X, Y, Z, c, threads)
+        end_time = time.time()
+        print(f"GPU TFM time: {end_time - start_time:.3f}s")
+
+    print()
+
+    if save_picture:
+        out_name = os.path.splitext(file)[0] + f"_TFM_3D.npy"
         np.save(
             os.path.join(OUT_DIR, out_name),
             img
         )
 
-    if all_pictures == 'n':
+    if not all_pictures:
         break

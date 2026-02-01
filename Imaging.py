@@ -18,11 +18,12 @@ input_data_folder    = '1D Processed Data'
 input_data_subfolder = 'Al Hole 5MHz 28012026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
-display_picture      = False  
-save_picture         = False 
-all_pictures         = True
+display_picture      = True  
+save_picture         = False
+all_pictures         = False
 engine               = 'gpu'    # python/cpp/gpu
 osys                 = 'ubuntu' # windows/ubuntu, choose windows if on mac
+threads              = 512
 
 # Image Parameters
 c = 6320 # m/s
@@ -114,7 +115,7 @@ for file in xlsx_files:
         tx0 = tx - 1
         rx0 = rx - 1
         X, Z = np.meshgrid(x_img, z_img)
-        img = tfm_gpu.tfm1D_GPU(time_data, time_sec, tx0, rx0, xc, zc, X, Z, c)
+        img = tfm_gpu.tfm1D_GPU(time_data, time_sec, tx0, rx0, xc, zc, X, Z, c, threads)
         end_time = time.time()
         print(f"GPU ROCm execution time: {end_time - start_time:.6f}")
 
