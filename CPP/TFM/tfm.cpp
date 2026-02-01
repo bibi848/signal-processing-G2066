@@ -43,7 +43,7 @@ void tfm1D(
             const double dtot = (std::sqrt(dx_t * dx_t + dz_t * dz_t) + std::sqrt(dx_r * dx_r + dz_r * dz_r)) / c;
 
             const double idx = (dtot - t0) / dt;
-            const int i0 = static_cast<int>(idx);
+            const int i0 = static_cast<int>(std::floor(idx));
 
             if (i0 < 0 || i0 >= Nt - 1) continue;
 
@@ -105,7 +105,7 @@ void tfm2D(
             const double dtot = (std::sqrt(dx_t * dx_t + dy_t * dy_t + dz_t * dz_t) + std::sqrt(dx_r * dx_r + dy_r * dy_r + dz_r * dz_r)) / c;
 
             const double idx = (dtot - t0) / dt;
-            const int i0 = static_cast<int>(idx);
+            const int i0 = static_cast<int>(std::floor(idx));
 
             if (i0 < 0 || i0 >= Nt - 1) continue;
 
