@@ -1,2 +1,4 @@
 .venv
-git information.txt
+Instructions.txt
+build
+threads_optim.py
