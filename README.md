@@ -3,9 +3,20 @@
 Welcome to the 2026 Group Industrial Project GitHub repository for Sensing, Imaging and Signal Processing. This repository will be used to collaborate on code written, and serve as a record of how the project grows over time. 
 
 ## Repository Summary
+Folders:
+* **CPP**: Contains the frameworks for accelerated TFM calculations, using both OpenMP for CPU multi-threading and HIP/ROCm for GPU leveraged computing based on a C++ architecture. A full explanation is included in the folder itself. 
+* **Classes**: Contains TFM implementations in Python.
+* **DATA**: Contains raw and processed data, as well as finalised TFM images used in stitching operations.
+* **STITCHING**: Contains notebooks exploring different stitching algorithms applied to the TFM images. 
+
 Files:
 * `.gitignore`: Used to ignore files or folders from commits, such as propriatary datasets. 
 * `.python-version`: Used to define the Python version of the project. The project uses Python 3.13.7
+* `CMakeLists.txt`: Detects whether the user is using Windows or Linux, to set up the OpenMP and HIP/ROCm environments. More details below.
+* `Display3DData.py`: Uses the napari library to view the 3D TFM data.
+* `Imaging.py`: Connects the processed data to the appropriate TFM calculation, which can include a Python-based calculation held in the folder **Classes**, an OpenMP accelerated C++ function contained in the **CPP** folder, or a GPU leveraged computation held in the **CPP** folder. This is for producing 2D TFM images.
+* `Imaging3D.py`: Connects the processed data to the appropriate TFM calculation, which includes an OpenMP accelerated C++ function in the **CPP** folder, or a GPU leveraged computation held in the **CPP** folder. This is for producing 3D TFM images.
+* `MATtoCSV.py`: Converts the raw data collected in the UNDT lab (.mat files) to processed and readable data (.xlsx files) to then be imaged by `Imaging.py` or `Imaging3D.py`. 
 * `README.md`: The file you are reading right now!
 * `requirements.txt`: Contains all libraries used in the project. More information on how to use it below. 
 
