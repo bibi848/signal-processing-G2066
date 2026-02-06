@@ -36,7 +36,7 @@ cmap = 'viridis'
 # Input and Output paths.
 if filtered_data:
     IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, (input_data_subfolder+' Filtered'))
-    OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, input_data_subfolder+' Filtered')
+    OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, (input_data_subfolder+' Filtered'))
     os.makedirs(OUT_DIR, exist_ok=True)
 else:
     IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, input_data_subfolder)
