@@ -15,27 +15,34 @@ from Classes.TFM1D import TFM1D
 
 # Point the script to the correct subfolder.
 input_data_folder    = '1D Processed Data'
-input_data_subfolder = 'Al Hole 15MHz 26012026'
+input_data_subfolder = 'Al Pure 15MHz 26012026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
-display_picture      = True  
+display_picture      = True
 save_picture         = True
-all_pictures         = False
+all_pictures         = True
+filtered_data        = True
 engine               = 'cpp'    # python/cpp/gpu
 osys                 = 'ubuntu' # windows/ubuntu, choose windows if on mac
 threads              = 512
 
 # Image Parameters
 c = 6320 # m/s
-depth = 50e-3 # mm
-x_pixels = 200
-z_pixels = 300
-cmap = 'hot'
+depth = 40e-3 # mm
+x_pixels = 300
+z_pixels = 500
+cmap = 'viridis'
 
 # Input and Output paths.
-IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, input_data_subfolder)
-OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, input_data_subfolder)
-os.makedirs(OUT_DIR, exist_ok=True)
+if filtered_data:
+    IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, (input_data_subfolder+' Filtered'))
+    OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, input_data_subfolder+' Filtered')
+    os.makedirs(OUT_DIR, exist_ok=True)
+else:
+    IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, input_data_subfolder)
+    OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, input_data_subfolder)
+    os.makedirs(OUT_DIR, exist_ok=True)
+
 
 # Find all files in directory which are .xlsx files.
 xlsx_files = [
@@ -78,7 +85,6 @@ elif engine == 'gpu':
 #%%
 # Looping over available files
 for file in xlsx_files:
-    file = 'Al_40_2_filtered.xlsx'
     print('Processing', file)
 
     file_path = os.path.join(IN_DIR, file)

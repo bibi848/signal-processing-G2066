@@ -14,12 +14,12 @@ from Classes.Filter import filter_signal
 
 # Point the script to the correct subfolder.
 raw_data_type       = '1D Raw Data'
-raw_data_name       = 'Al Hole 5MHz 026012026'
+raw_data_name       = 'Al Pure 15MHz 26012026'
 processed_data_type = '1D Processed Data'
 cwd                 = os.getcwd()
 display_picture     = True
 save_picture        = False
-all_pictures        = False 
+all_pictures        = True 
 filter_data         = True
 
 # Filtering Parameters
@@ -30,6 +30,9 @@ hanning_bool = True
 # Input and Output paths.
 IN_DIR  = os.path.join(cwd, 'DATA', raw_data_type, raw_data_name)
 OUT_DIR = os.path.join(cwd, 'DATA', processed_data_type, raw_data_name)
+
+if filter_data:
+    OUT_DIR = os.path.join(cwd, 'DATA', processed_data_type, (raw_data_name + ' Filtered'))
 
 # Find all files in directory which are .mat files. 
 mat_files = [
@@ -46,7 +49,6 @@ print()
 # Extracting all data from .mat files. 
 
 for file in mat_files:
-    file = 'Al_40_2.mat'
     print('Processing', file)
     file_path = os.path.join(IN_DIR, file)
 
