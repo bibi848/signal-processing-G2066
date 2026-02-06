@@ -2,4 +2,5 @@
 Instructions.txt
 build
 threads_optim.py
-.DS_Store
+*.DS_Store
+*.npy
