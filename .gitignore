@@ -4,3 +4,4 @@ build
 threads_optim.py
 *.DS_Store
 *.npy
+test.py

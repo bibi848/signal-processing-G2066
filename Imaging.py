@@ -15,18 +15,22 @@ from Classes.TFM1D import TFM1D
 
 # Point the script to the correct subfolder.
 input_data_folder    = '1D Processed Data'
-input_data_subfolder = 'Al Hole 5MHz 28012026'
+input_data_subfolder = 'Al Hole 15MHz 26012026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
 display_picture      = True  
-save_picture         = False
+save_picture         = True
 all_pictures         = False
-engine               = 'gpu'    # python/cpp/gpu
+engine               = 'cpp'    # python/cpp/gpu
 osys                 = 'ubuntu' # windows/ubuntu, choose windows if on mac
 threads              = 512
 
 # Image Parameters
 c = 6320 # m/s
+depth = 50e-3 # mm
+x_pixels = 200
+z_pixels = 300
+cmap = 'hot'
 
 # Input and Output paths.
 IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, input_data_subfolder)
@@ -74,6 +78,7 @@ elif engine == 'gpu':
 #%%
 # Looping over available files
 for file in xlsx_files:
+    file = 'Al_40_2_filtered.xlsx'
     print('Processing', file)
 
     file_path = os.path.join(IN_DIR, file)
@@ -91,8 +96,8 @@ for file in xlsx_files:
     xc = geometry["el_xc"].values
     zc = geometry["el_zc"].values
 
-    x_img = np.linspace(xc.min(), xc.max(), 200)
-    z_img = np.linspace(0e-3, 40e-3, 300)
+    x_img = np.linspace(xc.min(), xc.max(), x_pixels)
+    z_img = np.linspace(0e-3, depth, z_pixels)
 
     # TFM computation
     if engine == 'python':
@@ -126,27 +131,22 @@ for file in xlsx_files:
             img,
             extent=[x_img[0]*1e3, x_img[-1]*1e3, z_img[-1]*1e3, z_img[0]*1e3],
             aspect="auto",
-            cmap="viridis"
+            cmap=cmap
         )
         plt.xlabel("x [mm]")
         plt.ylabel("z [mm]")
         plt.colorbar(label="Amplitude")
         plt.title(file)
         plt.tight_layout()
-        
-        if save_picture:
-            out_name = os.path.splitext(file)[0] + "_TFM.png"
-            plt.savefig(os.path.join(OUT_DIR, out_name), dpi=300, bbox_inches='tight')
-        
         plt.show()
     
     # Save clean file
     if save_picture:
-        out_name = os.path.splitext(file)[0] + "_TFM_clean.png"
+        out_name = os.path.splitext(file)[0] + "_TFM.png"
         plt.imsave(
             os.path.join(OUT_DIR, out_name),
             img,
-            cmap="viridis"
+            cmap=cmap
         )
 
     if not all_pictures:

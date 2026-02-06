@@ -10,12 +10,22 @@ import numpy as np
 import h5py
 import os
 
+from Classes.Filter import filter_signal
+
 # Point the script to the correct subfolder.
-raw_data_type       = '2D Raw Data'
-raw_data_name       = 'Al Hole 3MHz 28012026'
-processed_data_type = '2D Processed Data'
+raw_data_type       = '1D Raw Data'
+raw_data_name       = 'Al Hole 5MHz 026012026'
+processed_data_type = '1D Processed Data'
 cwd                 = os.getcwd()
-display_picture     = 'y' # y/n
+display_picture     = True
+save_picture        = False
+all_pictures        = False 
+filter_data         = True
+
+# Filtering Parameters
+filter_alpha = 0.2
+MHz_spacing  = 1.5 # MHz
+hanning_bool = True
 
 # Input and Output paths.
 IN_DIR  = os.path.join(cwd, 'DATA', raw_data_type, raw_data_name)
@@ -36,6 +46,7 @@ print()
 # Extracting all data from .mat files. 
 
 for file in mat_files:
+    file = 'Al_40_2.mat'
     print('Processing', file)
     file_path = os.path.join(IN_DIR, file)
 
@@ -108,8 +119,28 @@ for file in mat_files:
         "el_zc": el_zc
     })
 
+    if filter_data:
+        f_start = (centre_freq/1e6) - MHz_spacing
+        f_end   = (centre_freq/1e6) + MHz_spacing
+        dt      = time[1] - time[0]
+
+        print("Filtering Signals")
+        time_data = np.apply_along_axis(
+            filter_signal, 
+            axis=1, 
+            arr=time_data, 
+            dt=dt, 
+            f_start=f_start, 
+            f_end=f_end, 
+            filter_alpha=filter_alpha,
+            hanning_bool=hanning_bool
+            )
+        time_data_df = pd.DataFrame(time_data)
+
     # Write Excel
     excel_name = os.path.splitext(file)[0] + ".xlsx"
+    if filter_data:
+        excel_name = os.path.splitext(file)[0] + '_filtered.xlsx'
     excel_path = os.path.join(OUT_DIR, excel_name)
 
     with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
@@ -121,7 +152,7 @@ for file in mat_files:
 
     print(f"{excel_name} done")
 
-    if display_picture == 'y':
+    if display_picture:
         print('Displaying transmit/receive data')
 
         n_el = len(el_x1)
@@ -149,9 +180,14 @@ for file in mat_files:
         plt.ylabel("Receiver Number")
         plt.colorbar(label="Intensity")
         plt.tight_layout()
-        out_name = os.path.splitext(file)[0] + ".png"
-        plt.savefig(os.path.join(OUT_DIR, out_name), dpi=300, bbox_inches='tight')
+        
+        if save_picture:
+            out_name = os.path.splitext(file)[0] + ".png"
+            plt.savefig(os.path.join(OUT_DIR, out_name), dpi=300, bbox_inches='tight')
+        
         plt.show()
 
+    if not all_pictures:
+        break
     print()
 #%%
