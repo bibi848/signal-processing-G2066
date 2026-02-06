@@ -31,7 +31,7 @@ print('Files available in directory:')
 print(npy_files)
 print()
 
-img = np.load(os.path.join(IN_DIR, "Al_40_3_TFM_3D.npy"))
+img = np.load(os.path.join(IN_DIR, "Al_40_4_TFM_3D.npy"))
 
 viewer = napari.Viewer()
 viewer.add_image(
