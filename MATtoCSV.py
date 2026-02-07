@@ -13,12 +13,12 @@ import os
 from Classes.Filter import filter_signal
 
 # Point the script to the correct subfolder.
-raw_data_type       = '1D Raw Data'
-raw_data_name       = 'Al Pure 15MHz 26012026'
-processed_data_type = '1D Processed Data'
+raw_data_type       = '2D Raw Data'
+raw_data_name       = 'FeC_S Wavy 3MHz 04022026'
+processed_data_type = '2D Processed Data'
 cwd                 = os.getcwd()
-display_picture     = True
-save_picture        = False
+display_picture     = False
+save_picture        = True
 all_pictures        = True 
 filter_data         = True
 
@@ -29,10 +29,11 @@ hanning_bool = True
 
 # Input and Output paths.
 IN_DIR  = os.path.join(cwd, 'DATA', raw_data_type, raw_data_name)
-OUT_DIR = os.path.join(cwd, 'DATA', processed_data_type, raw_data_name)
-
 if filter_data:
     OUT_DIR = os.path.join(cwd, 'DATA', processed_data_type, (raw_data_name + ' Filtered'))
+else:
+    OUT_DIR = os.path.join(cwd, 'DATA', processed_data_type, raw_data_name)
+os.makedirs(OUT_DIR, exist_ok=True)
 
 # Find all files in directory which are .mat files. 
 mat_files = [
@@ -51,6 +52,13 @@ print()
 for file in mat_files:
     print('Processing', file)
     file_path = os.path.join(IN_DIR, file)
+
+    base_name = os.path.splitext(file)[0]
+    if filter_data:
+        base_name += "_filtered"
+
+    file_out_dir = os.path.join(OUT_DIR, base_name)
+    os.makedirs(file_out_dir, exist_ok=True)
 
     with h5py.File(file_path, "r") as f:
         centre_freq = f["exp_data/array/centre_freq"][()][0][0]
@@ -137,22 +145,55 @@ for file in mat_files:
             filter_alpha=filter_alpha,
             hanning_bool=hanning_bool
             )
+
+        # Compressing
+        print('Compressing Signals')
+        time_data = time_data = time_data.astype(np.float32)
         time_data_df = pd.DataFrame(time_data)
 
-    # Write Excel
-    excel_name = os.path.splitext(file)[0] + ".xlsx"
-    if filter_data:
-        excel_name = os.path.splitext(file)[0] + '_filtered.xlsx'
-    excel_path = os.path.join(OUT_DIR, excel_name)
+    # Write CSV file
+    print("Writing CSV files")
 
-    with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
-        metadata_df.to_excel(writer, sheet_name="Metadata", index=False)
-        time_data_df.to_excel(writer, sheet_name="Time_Data", index=False)
-        time_df.to_excel(writer, sheet_name="Time", index=False)
-        tx_rx_df.to_excel(writer, sheet_name="tx_rx", index=False)
-        geometry_df.to_excel(writer, sheet_name="Array_Geometry", index=False)
+    metadata_df.to_csv(
+        os.path.join(file_out_dir, "metadata.csv"),
+        index=False
+    )
 
-    print(f"{excel_name} done")
+    time_df.to_csv(
+        os.path.join(file_out_dir, "time.csv"),
+        index=False,
+        float_format="%.10g"
+    )
+
+    tx_rx_df.to_csv(
+        os.path.join(file_out_dir, "tx_rx.csv"),
+        index=False
+    )
+
+    geometry_df.to_csv(
+        os.path.join(file_out_dir, "array_geometry.csv"),
+        index=False,
+        float_format="%.10g"
+    )
+
+    h5_path = os.path.join(file_out_dir, "time_data.h5")
+
+    with h5py.File(h5_path, "w") as h5f:
+        dset = h5f.create_dataset(
+            "time_data",
+            data=time_data,
+            dtype="float32",
+            compression="gzip",
+            compression_opts=4,
+            chunks=(1, time_data.shape[1])
+        )
+    
+        # Metadata as attributes
+        dset.attrs["centre_frequency_Hz"] = centre_freq
+        dset.attrs["dt"] = time[1] - time[0]
+        dset.attrs["filtered"] = filter_data
+
+    print(f"{base_name} done")
 
     if display_picture:
         print('Displaying transmit/receive data')
@@ -185,7 +226,7 @@ for file in mat_files:
         
         if save_picture:
             out_name = os.path.splitext(file)[0] + ".png"
-            plt.savefig(os.path.join(OUT_DIR, out_name), dpi=300, bbox_inches='tight')
+            plt.savefig(os.path.join(file_out_dir, out_name), dpi=300, bbox_inches='tight')
         
         plt.show()
 
