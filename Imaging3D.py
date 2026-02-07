@@ -13,21 +13,31 @@ import time
 
 # Point the script to the correct subfolder.
 input_data_folder    = '2D Processed Data'
-input_data_subfolder = 'Al Hole 3MHz 28012026'
+input_data_subfolder = 'FeC Smile 3MHz 04022026'
 output_data_folder   = '2D TFM Data'
 cwd                  = os.getcwd()
 save_picture         = True
 all_pictures         = True
+filtered_data        = True
 engine               = 'gpu' # cpp / gpu
 threads              = 512
 
 # Parameters
 c = 6320 # m/s
+depth = 80e-3 # mm
+x_pixels = 200
+y_pixels = 200
+z_pixels = 350
 
 # Input and Output paths.
-IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, input_data_subfolder)
-OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, input_data_subfolder)
-os.makedirs(OUT_DIR, exist_ok=True)
+if filtered_data:
+    IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, (input_data_subfolder+' Filtered'))
+    OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, (input_data_subfolder+' Filtered'))
+    os.makedirs(OUT_DIR, exist_ok=True)
+else:
+    IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, input_data_subfolder)
+    OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, input_data_subfolder)
+    os.makedirs(OUT_DIR, exist_ok=True)
 
 # Find all files in directory which are .xlsx files. 
 xlsx_files = [
@@ -84,9 +94,9 @@ for file in xlsx_files:
     zc = geometry["el_zc"].values
 
     # Image grid
-    x_img = np.linspace(xc.min(), xc.max(), 200)
-    y_img = np.linspace(yc.min(), yc.max(), 200)
-    z_img = np.linspace(0e-3, 40e-3, 300)
+    x_img = np.linspace(xc.min(), xc.max(), x_pixels)
+    y_img = np.linspace(yc.min(), yc.max(), y_pixels)
+    z_img = np.linspace(0e-3, depth, z_pixels)
     tx0 = tx - 1
     rx0 = rx - 1
 

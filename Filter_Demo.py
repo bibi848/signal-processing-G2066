@@ -15,7 +15,7 @@ from Classes.Filter import filter_signal
 
 # Point the script to the correct subfolder.
 raw_data_type       = '1D Raw Data'
-raw_data_name       = 'Al Hole 15MHz 26012026'
+raw_data_name       = 'Al Hole 5MHz 26012026'
 processed_data_type = '1D Processed Data'
 cwd                 = os.getcwd()
 file                = 'Al_40_2.mat'
@@ -195,3 +195,5 @@ plt.legend()
 plt.grid(True)
 plt.tight_layout()
 plt.show()
+
+#%%
