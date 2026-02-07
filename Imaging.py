@@ -1,5 +1,5 @@
 '''
-This script converts the .xlsx files processed previously into TFM images. 
+This script converts the files processed previously into TFM images. 
 '''
 
 #%%
@@ -10,6 +10,7 @@ import numpy as np
 import os
 import sys
 import time
+import h5py
 
 from Classes.TFM1D import TFM1D
 
@@ -18,20 +19,20 @@ input_data_folder    = '1D Processed Data'
 input_data_subfolder = 'Al Pure 15MHz 26012026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
-display_picture      = True
+display_picture      = False
 save_picture         = True
 all_pictures         = True
 filtered_data        = True
-engine               = 'cpp'    # python/cpp/gpu
+engine               = 'gpu'    # python/cpp/gpu
 osys                 = 'ubuntu' # windows/ubuntu, choose windows if on mac
 threads              = 512
 
 # Image Parameters
-c = 6320 # m/s
-depth = 40e-3 # mm
+c        = 6320 # m/s
+depth    = 40e-3 # mm
 x_pixels = 300
 z_pixels = 500
-cmap = 'viridis'
+cmap     = 'viridis'
 
 # Input and Output paths.
 if filtered_data:
@@ -43,16 +44,14 @@ else:
     OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, input_data_subfolder)
     os.makedirs(OUT_DIR, exist_ok=True)
 
-
-# Find all files in directory which are .xlsx files.
-xlsx_files = [
+# List all available image folders
+image_folders = [
     f for f in os.listdir(IN_DIR)
-    if f.lower().endswith(".xlsx")
-    and os.path.isfile(os.path.join(IN_DIR, f))
+    if os.path.isdir(os.path.join(IN_DIR, f))
 ]
 
 print('Files available in directory:')
-print(xlsx_files)
+print(image_folders)
 print()
 
 # Import module
@@ -84,17 +83,20 @@ elif engine == 'gpu':
 
 #%%
 # Looping over available files
-for file in xlsx_files:
-    print('Processing', file)
+full_start = time.time()
+for fol in image_folders:
+    print('Processing', fol)
 
-    file_path = os.path.join(IN_DIR, file)
+    file_path = os.path.join(IN_DIR, fol)
 
     # Extract Data
-    metadata  = pd.read_excel(file_path, "Metadata")
-    time_data = pd.read_excel(file_path, "Time_Data").values
-    time_sec  = pd.read_excel(file_path, "Time")["time_seconds"].values
-    tx_rx     = pd.read_excel(file_path, "tx_rx")
-    geometry  = pd.read_excel(file_path, "Array_Geometry")
+    metadata = pd.read_csv(os.path.join(file_path, "metadata.csv"))
+    time_sec = pd.read_csv(os.path.join(file_path, "time.csv"))["time_seconds"].values
+    tx_rx    = pd.read_csv(os.path.join(file_path, "tx_rx.csv"))
+    geometry = pd.read_csv(os.path.join(file_path, "array_geometry.csv"))
+
+    with h5py.File(os.path.join(file_path, "time_data.h5"), "r") as h5f:
+        time_data = h5f["time_data"][:]
 
     tx = tx_rx["tx"].values.astype(int)
     rx = tx_rx["rx"].values.astype(int)
@@ -142,13 +144,13 @@ for file in xlsx_files:
         plt.xlabel("x [mm]")
         plt.ylabel("z [mm]")
         plt.colorbar(label="Amplitude")
-        plt.title(file)
+        plt.title(fol)
         plt.tight_layout()
         plt.show()
     
     # Save clean file
     if save_picture:
-        out_name = os.path.splitext(file)[0] + "_TFM.png"
+        out_name = fol + "_TFM.png"
         plt.imsave(
             os.path.join(OUT_DIR, out_name),
             img,
@@ -160,4 +162,6 @@ for file in xlsx_files:
 
     print()
 
+full_end = time.time()
+print(f'Time to process {len(image_folders)} images: {full_end - full_start:.6f}s')
 #%%

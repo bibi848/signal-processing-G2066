@@ -1,19 +1,19 @@
 '''
-This script converts the 2D array .xlsx files processed previously into 3D TFM images. 
+This script converts the 2D array files processed previously into 3D TFM images. 
 '''
 
 #%%
 # Importing Functions and Defining Correct Path
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import os
 import sys
 import time
+import h5py
 
 # Point the script to the correct subfolder.
 input_data_folder    = '2D Processed Data'
-input_data_subfolder = 'FeC Smile 3MHz 04022026'
+input_data_subfolder = 'FeC_S Wavy 3MHz 04022026'
 output_data_folder   = '2D TFM Data'
 cwd                  = os.getcwd()
 save_picture         = True
@@ -23,11 +23,11 @@ engine               = 'gpu' # cpp / gpu
 threads              = 512
 
 # Parameters
-c = 6320 # m/s
-depth = 80e-3 # mm
+c        = 6320 # m/s
+depth    = 80e-3 # mm
 x_pixels = 200
 y_pixels = 200
-z_pixels = 350
+z_pixels = 400
 
 # Input and Output paths.
 if filtered_data:
@@ -39,15 +39,14 @@ else:
     OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, input_data_subfolder)
     os.makedirs(OUT_DIR, exist_ok=True)
 
-# Find all files in directory which are .xlsx files. 
-xlsx_files = [
+# List all available image folders
+image_folders = [
     f for f in os.listdir(IN_DIR)
-    if f.lower().endswith(".xlsx")
-    and os.path.isfile(os.path.join(IN_DIR, f))
+    if os.path.isdir(os.path.join(IN_DIR, f))
 ]
 
 print('Files available in directory:')
-print(xlsx_files)
+print(image_folders)
 print()
 
 # Import the appropriate module
@@ -62,7 +61,6 @@ if engine == 'cpp':
     print('CPP Setup Successful')
     print()
 
-
 elif engine == 'gpu':
     build_dir = os.path.join(os.path.dirname(__file__), "build", "CPP", "TFM_GPU")
     sys.path.insert(0, build_dir)
@@ -73,18 +71,20 @@ elif engine == 'gpu':
 
 #%%
 # Looping over available files
-for file in xlsx_files:
-    print('Processing', file)
+full_start = time.time()
+for fol in image_folders:
+    print('Processing', fol)
 
-    s = time.time()
-    file_path = os.path.join(IN_DIR, file)
+    file_path = os.path.join(IN_DIR, fol)
 
     # Extract Data
-    metadata  = pd.read_excel(file_path, "Metadata")
-    time_data = pd.read_excel(file_path, "Time_Data").values
-    time_sec  = pd.read_excel(file_path, "Time")["time_seconds"].values
-    tx_rx     = pd.read_excel(file_path, "tx_rx")
-    geometry  = pd.read_excel(file_path, "Array_Geometry")
+    metadata = pd.read_csv(os.path.join(file_path, "metadata.csv"))
+    time_sec = pd.read_csv(os.path.join(file_path, "time.csv"))["time_seconds"].values
+    tx_rx    = pd.read_csv(os.path.join(file_path, "tx_rx.csv"))
+    geometry = pd.read_csv(os.path.join(file_path, "array_geometry.csv"))
+
+    with h5py.File(os.path.join(file_path, "time_data.h5"), "r") as h5f:
+        time_data = h5f["time_data"][:]
 
     tx = tx_rx["tx"].values.astype(int)
     rx = tx_rx["rx"].values.astype(int)
@@ -101,9 +101,6 @@ for file in xlsx_files:
     rx0 = rx - 1
 
     Z, Y, X = np.meshgrid(z_img, y_img, x_img, indexing="ij")
-    e = time.time()
-    print(f"Data Setup Time: {e - s:.3f}s")
-    print()
 
     # TFM computation
     print('Starting TFM')
@@ -119,10 +116,8 @@ for file in xlsx_files:
         end_time = time.time()
         print(f"GPU TFM time: {end_time - start_time:.3f}s")
 
-    print()
-
     if save_picture:
-        out_name = os.path.splitext(file)[0] + f"_TFM_3D.npy"
+        out_name = fol + "_3D_TFM.npy"
         np.save(
             os.path.join(OUT_DIR, out_name),
             img
@@ -130,3 +125,8 @@ for file in xlsx_files:
 
     if not all_pictures:
         break
+
+    print()
+
+full_end = time.time()
+print(f'Time to process {len(image_folders)} images: {full_end - full_start:.6f}s')
