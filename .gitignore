@@ -6,3 +6,4 @@ threads_optim.py
 *.npy
 test.py
 __pycache__
+*.npz
