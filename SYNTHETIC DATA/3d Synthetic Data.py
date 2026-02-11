@@ -10,15 +10,16 @@ Methodology:
 
 import os
 import sys
+import numpy as np
+from scipy.ndimage import gaussian_filter
+import napari
 
 # # Configure QT environment for macOS
 # os.environ['QT_QPA_PLATFORM'] = 'cocoa'
 # os.environ['QT_MAC_WANTS_LAYER'] = '1'
 
-import numpy as np
-from scipy.ndimage import gaussian_filter
-import napari
-
+# TODO: add noise generation for volumes, add imaging artefact around defects, maybe add attenuation 
+# properties (more noise at depth) 
 
 class SyntheticVolumeGenerator:
     """
@@ -257,7 +258,7 @@ class SyntheticVolumeGenerator:
                 
                 meta = {k: v for k, v in sv.items() if k != 'volume'}
                 meta_filename = os.path.join(save_dir, f"subvol_{idx[0]}_{idx[1]}_{idx[2]}_meta.npy")
-                np.save(meta_filename, meta, allow_pickle=True)
+                np.savez(meta_filename, **meta)
             
             recon_info = {
                 'original_shape': (z_dim, y_dim, x_dim),
@@ -267,7 +268,7 @@ class SyntheticVolumeGenerator:
                 'step': (step_z, step_y, step_x),
                 'num_subvolumes': len(sub_volumes)
             }
-            np.save(os.path.join(save_dir, 'reconstruction_info.npy'), recon_info, allow_pickle=True)
+            np.savez(os.path.join(save_dir, 'reconstruction_info.npz'), **recon_info)
             print(f"\nSaved {len(sub_volumes)} sub-volumes to: {save_dir}")
         
         return sub_volumes
