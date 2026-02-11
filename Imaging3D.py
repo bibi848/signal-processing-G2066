@@ -10,10 +10,11 @@ import os
 import sys
 import time
 import h5py
+from scipy.signal import hilbert
 
 # Point the script to the correct subfolder.
 input_data_folder    = '2D Processed Data'
-input_data_subfolder = 'FeC_S Wavy 3MHz 04022026'
+input_data_subfolder = 'FeC Smile 3MHz 04022026'
 output_data_folder   = '2D TFM Data'
 cwd                  = os.getcwd()
 save_picture         = True
@@ -21,6 +22,11 @@ all_pictures         = True
 filtered_data        = True
 engine               = 'gpu' # cpp / gpu
 threads              = 512
+
+CTFM    = True
+db_bool = True
+vmax    = 0.0
+vmin    = -10.0
 
 # Parameters
 c        = 6320 # m/s
@@ -107,16 +113,39 @@ for fol in image_folders:
     if engine == 'cpp':
         start_time = time.time()
         img = tfm_cpp.tfm2D(time_data, time_sec, tx0, rx0, xc, yc, zc, X, Y, Z, c)
+
+        if CTFM:
+            # Hilbert transform
+            img_analytic = hilbert(img, axis=0)
+            img = np.abs(img_analytic)
+
+            if db_bool:
+                img_max = np.max(img)
+                img = 20 * np.log10(img / img_max + 1e-10)
+
         end_time = time.time()
         print(f"CPP TFM time: {end_time - start_time:.3f}s")
 
     elif engine == 'gpu':
         start_time = time.time()
         img = tfm_gpu.tfm2D_GPU(time_data, time_sec, tx0, rx0, xc, yc, zc, X, Y, Z, c, threads)
+
+        if CTFM:
+            # Hilbert transform
+            img_analytic = hilbert(img, axis=0)
+            img = np.abs(img_analytic)
+
+            if db_bool:
+                img_max = np.max(img)
+                img = 20 * np.log10(img / img_max + 1e-10)
+
         end_time = time.time()
         print(f"GPU TFM time: {end_time - start_time:.3f}s")
 
     if save_picture:
+        if db_bool:
+            img = np.clip(img, vmin, vmax)
+
         out_name = fol + "_3D_TFM.npy"
         np.save(
             os.path.join(OUT_DIR, out_name),
