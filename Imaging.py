@@ -192,7 +192,6 @@ for fol in image_folders:
         plt.show()
     
     if save_picture:
-        out_name = fol + "_TFM.png"
         plt.imsave(
             os.path.join(OUT_DIR, fol + "_TFM.png"),
             img,
