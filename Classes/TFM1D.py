@@ -101,7 +101,6 @@ def CTFM1D(time_data, time, tx, rx, xc, zc, c, x_img, z_img,
 
     # Diffusion attenuation compensation factor
     C_ij = 1.0 / np.sqrt(d_tx * d_rx + eps)
-    C_ij = 1.0
 
     # Travel Time
     t_tot = (d_tx + d_rx) / c
