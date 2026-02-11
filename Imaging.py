@@ -13,6 +13,7 @@ import time
 import h5py
 
 from Classes.TFM1D import TFM1D
+from Classes.TFM1D import CTFM1D
 
 # Point the script to the correct subfolder.
 input_data_folder    = '1D Processed Data'
@@ -26,6 +27,11 @@ filtered_data        = True
 engine               = 'gpu'    # python/cpp/gpu
 osys                 = 'ubuntu' # windows/ubuntu, choose windows if on mac
 threads              = 512
+
+CTFM    = True
+db_bool = True
+vmax    = 0.0
+vmin    = -10.0
 
 # Image Parameters
 c        = 6320 # m/s
@@ -110,7 +116,12 @@ for fol in image_folders:
     # TFM computation
     if engine == 'python':
         start_time = time.time()
-        img = TFM1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img)
+
+        if CTFM:
+            img = CTFM1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img, output_db=db_bool)
+        else:
+            img = TFM1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img)
+
         end_time = time.time()
         print(f"Python execution time: {end_time - start_time:.6f}")
 
@@ -135,27 +146,29 @@ for fol in image_folders:
     # Display picture
     if display_picture:
         plt.figure(figsize=(6, 8))
-        plt.imshow(
-            img,
-            extent=[x_img[0]*1e3, x_img[-1]*1e3, z_img[-1]*1e3, z_img[0]*1e3],
-            aspect="auto",
-            cmap=cmap
-        )
+        if db_bool:
+            plt.imshow(
+                img,
+                vmax=vmax,
+                vmin=vmin,
+                extent=[x_img[0]*1e3, x_img[-1]*1e3, z_img[-1]*1e3, z_img[0]*1e3],
+                aspect="auto",
+                cmap=cmap
+            )
+      
+        else:
+            plt.imshow(
+                img,
+                extent=[x_img[0]*1e3, x_img[-1]*1e3, z_img[-1]*1e3, z_img[0]*1e3],
+                aspect="auto",
+                cmap=cmap
+            )
         plt.xlabel("x [mm]")
         plt.ylabel("z [mm]")
         plt.colorbar(label="Amplitude")
         plt.title(fol)
         plt.tight_layout()
         plt.show()
-    
-    # Save clean file
-    if save_picture:
-        out_name = fol + "_TFM.png"
-        plt.imsave(
-            os.path.join(OUT_DIR, out_name),
-            img,
-            cmap=cmap
-        )
 
     if not all_pictures:
         break
