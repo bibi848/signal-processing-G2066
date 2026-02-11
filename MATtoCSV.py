@@ -14,7 +14,7 @@ from Classes.Filter import filter_signal
 
 # Point the script to the correct subfolder.
 raw_data_type       = '2D Raw Data'
-raw_data_name       = 'FeC_S Wavy 3MHz 04022026'
+raw_data_name       = 'Al Pure 15MHz 09022026'
 processed_data_type = '2D Processed Data'
 cwd                 = os.getcwd()
 display_picture     = False
@@ -62,7 +62,12 @@ for file in mat_files:
 
     with h5py.File(file_path, "r") as f:
         centre_freq = f["exp_data/array/centre_freq"][()][0][0]
-        manufacturer_raw = np.array(f["exp_data/array/manufacturer"])
+
+        if "manufacturer" in f["exp_data/array"]:
+            manufacturer_raw = np.array(f["exp_data/array/manufacturer"])
+            manufacturer = ''.join(chr(c) for c in manufacturer_raw.flatten())
+        else:
+            manufacturer = "UNKNOWN"
 
         el_x1 = np.array(f["exp_data/array/el_x1"]).flatten()
         el_x2 = np.array(f["exp_data/array/el_x2"]).flatten()
@@ -79,8 +84,6 @@ for file in mat_files:
 
         time = np.array(f["exp_data/time"])[0]
         time_data = np.array(f["exp_data/time_data"])
-
-    manufacturer = ''.join(chr(c) for c in manufacturer_raw.flatten())
 
     # Metadata
     metadata_df = pd.DataFrame({
