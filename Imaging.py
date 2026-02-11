@@ -11,33 +11,34 @@ import os
 import sys
 import time
 import h5py
+from scipy.signal import hilbert
 
 from Classes.TFM1D import TFM1D
 from Classes.TFM1D import CTFM1D
 
 # Point the script to the correct subfolder.
 input_data_folder    = '1D Processed Data'
-input_data_subfolder = 'Al Pure 15MHz 26012026'
+input_data_subfolder = 'FeC Diag 5MHz 09022026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
-display_picture      = False
+display_picture      = True
 save_picture         = True
 all_pictures         = True
-filtered_data        = True
+filtered_data        = False
 engine               = 'gpu'    # python/cpp/gpu
 osys                 = 'ubuntu' # windows/ubuntu, choose windows if on mac
 threads              = 512
 
-CTFM    = True
-db_bool = True
+CTFM    = False
+db_bool = False
 vmax    = 0.0
 vmin    = -10.0
 
 # Image Parameters
 c        = 6320 # m/s
-depth    = 40e-3 # mm
+depth    = 100e-3 # mm
 x_pixels = 300
-z_pixels = 500
+z_pixels = 400
 cmap     = 'viridis'
 
 # Input and Output paths.
@@ -131,6 +132,16 @@ for fol in image_folders:
         rx0 = rx - 1
         X, Z = np.meshgrid(x_img, z_img)
         img = tfm_cpp.tfm1D(time_data, time_sec, tx0, rx0, xc, zc, X, Z, c)
+
+        if CTFM:
+            # Hilbert transform
+            img_analytic = hilbert(img, axis=0)
+            img = np.abs(img_analytic)
+
+            if db_bool:
+                img_max = np.max(img)
+                img = 20 * np.log10(img / img_max + 1e-10)
+
         end_time = time.time()
         print(f"CPP execution time: {end_time - start_time:.6f}")
         
@@ -140,6 +151,16 @@ for fol in image_folders:
         rx0 = rx - 1
         X, Z = np.meshgrid(x_img, z_img)
         img = tfm_gpu.tfm1D_GPU(time_data, time_sec, tx0, rx0, xc, zc, X, Z, c, threads)
+
+        if CTFM:
+            # Hilbert transform
+            img_analytic = hilbert(img, axis=0)
+            img = np.abs(img_analytic)
+
+            if db_bool:
+                img_max = np.max(img)
+                img = 20 * np.log10(img / img_max + 1e-10)
+
         end_time = time.time()
         print(f"GPU ROCm execution time: {end_time - start_time:.6f}")
 
@@ -169,6 +190,17 @@ for fol in image_folders:
         plt.title(fol)
         plt.tight_layout()
         plt.show()
+    
+    if save_picture:
+        out_name = fol + "_TFM.png"
+        plt.imsave(
+            os.path.join(OUT_DIR, fol + "_TFM.png"),
+            img,
+            cmap=cmap,
+            vmin=vmin if db_bool else None,
+            vmax=vmax if db_bool else None
+            )
+
 
     if not all_pictures:
         break
