@@ -1,0 +1,7 @@
+Field,Value
+origin,FeC_40_7.mat
+centre_frequency_Hz,5000000.0
+manufacturer,Imasonic
+number_of_elements,64
+number_of_fmc_traces,4096
+number_of_time_samples,1000
