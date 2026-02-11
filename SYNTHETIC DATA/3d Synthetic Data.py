@@ -182,7 +182,7 @@ class SyntheticVolumeGenerator:
             contrast_limits=(0.0, 1.0),
             blending='translucent',
             rendering='iso',
-            iso_threshold=0.3,
+            iso_threshold=1,
             opacity=0.7
         )
         napari.run()
@@ -353,9 +353,12 @@ class SyntheticVolumeGenerator:
                 sv['volume'],
                 name=f"SubVol {idx}",
                 colormap=colormaps[i % len(colormaps)],
+                contrast_limits=(0.0, 1.0),
                 blending='translucent',
+                rendering='iso',
+                iso_threshold=1,
                 opacity=0.5,
-                translate=sv['origin']  # origin is (z, y, x) matching napari
+                translate=sv['origin']
             )
         napari.run()
 
@@ -371,7 +374,7 @@ generator.add_spherical_void(center=(30, 50, 50), radius=8, intensity=0.95)
 generator.add_cylindrical_void(center_x=70, center_y=50, radius=5, intensity=0.92, axis='x')
 
 # Generate volume
-volume = generator.generate(base_intensity_range=(0.1, 0.3), smoothing_sigma=1.0)
+volume = generator.generate(base_intensity_range=(0.05, 0.25), smoothing_sigma=2.0)
 generator.save_volume(volume, "synthetic_volume.npy")
 
 # Split into sub-volumes with overlapped identical dimensions
