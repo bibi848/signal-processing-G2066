@@ -16,7 +16,7 @@ import os
 
 # Point the script to the correct subfolder.
 input_data_folder    = '2D TFM Data'
-input_data_subfolder = 'Al Hole 3MHz 28012026'
+input_data_subfolder = 'FeC Smile 3MHz 04022026 Filtered'
 cwd                  = os.getcwd()
 
 IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, input_data_subfolder)
@@ -31,7 +31,7 @@ print('Files available in directory:')
 print(npy_files)
 print()
 
-img = np.load(os.path.join(IN_DIR, "Al_40_4_TFM_3D.npy"))
+img = np.load(os.path.join(IN_DIR, "FeC_40_4_filtered_3D_TFM.npy"))
 
 viewer = napari.Viewer()
 viewer.add_image(

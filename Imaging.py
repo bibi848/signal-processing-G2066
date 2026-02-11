@@ -200,7 +200,6 @@ for fol in image_folders:
             vmax=vmax if db_bool else None
             )
 
-
     if not all_pictures:
         break
 
