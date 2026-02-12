@@ -1,0 +1,6 @@
+Imasonic 2D matrix 128 els 15MHz 0.3mm pitch
+Aquisition: FMC
+Sample Freq: 50MHz
+Time points: 2000
+gain: 70
+averages: 20
