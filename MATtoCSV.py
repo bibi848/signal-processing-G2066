@@ -21,6 +21,8 @@ display_picture     = True
 save_picture        = False
 all_pictures        = True 
 filter_data         = True
+crop_data           = True
+crop_amount         = 1001
 
 # Filtering Parameters
 filter_alpha = 0.2
@@ -105,8 +107,8 @@ for file in mat_files:
         ]
     })
 
-    # Time Data
-    time_data_df = pd.DataFrame(time_data)
+    time_data = time_data[:, :1001]
+    time      = time[:1001]
 
     # Time
     time_df = pd.DataFrame({
@@ -152,7 +154,6 @@ for file in mat_files:
         # Compressing
         print('Compressing Signals')
         time_data = time_data = time_data.astype(np.float32)
-        time_data_df = pd.DataFrame(time_data)
 
     # Write CSV file
     print("Writing CSV files")
