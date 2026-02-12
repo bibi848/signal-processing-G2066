@@ -14,11 +14,11 @@ from Classes.Filter import filter_signal
 
 # Point the script to the correct subfolder.
 raw_data_type       = '2D Raw Data'
-raw_data_name       = 'Al Pure 15MHz 09022026'
+raw_data_name       = 'Al Pure 15MHz 12022026'
 processed_data_type = '2D Processed Data'
 cwd                 = os.getcwd()
-display_picture     = False
-save_picture        = True
+display_picture     = True
+save_picture        = False
 all_pictures        = True 
 filter_data         = True
 

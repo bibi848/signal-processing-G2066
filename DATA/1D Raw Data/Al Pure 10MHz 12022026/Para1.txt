@@ -1,0 +1,7 @@
+Aquisition: FMC
+Sample Frequency: 50MHz
+Time Points: 2000
+Gain: 70
+Averages: 20
+
+Imasonic 1D 128 els 10MHz 0.3mm pitch
