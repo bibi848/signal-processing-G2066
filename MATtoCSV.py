@@ -107,8 +107,9 @@ for file in mat_files:
         ]
     })
 
-    time_data = time_data[:, :1001]
-    time      = time[:1001]
+    if crop_data:
+        time_data = time_data[:, :crop_amount]
+        time      = time[:crop_amount]
 
     # Time
     time_df = pd.DataFrame({
