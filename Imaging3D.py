@@ -14,7 +14,7 @@ from scipy.signal import hilbert
 
 # Point the script to the correct subfolder.
 input_data_folder    = '2D Processed Data'
-input_data_subfolder = 'FeC Smile 3MHz 04022026'
+input_data_subfolder = 'Al Pure 15MHz 12022026'
 output_data_folder   = '2D TFM Data'
 cwd                  = os.getcwd()
 save_picture         = True
@@ -23,14 +23,17 @@ filtered_data        = True
 engine               = 'gpu' # cpp / gpu
 threads              = 512
 
-CTFM    = True
-db_bool = True
+if filtered_data:
+    CTFM, db_bool = True, True
+else:
+    CTFM, db_bool = False, False
+
 vmax    = 0.0
-vmin    = -10.0
+vmin    = -25.0
 
 # Parameters
 c        = 6320 # m/s
-depth    = 80e-3 # mm
+depth    = 50e-3 # mm
 x_pixels = 200
 y_pixels = 200
 z_pixels = 400
