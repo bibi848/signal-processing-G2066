@@ -13,7 +13,7 @@ from itertools import combinations
 
 # Point the script to the correct subfolder.
 in_data_type = '1D TFM Data'
-in_data_name = 'Al Pure 10MHz 12022026'
+in_data_name = 'Cu Pure 10MHz 16022026'
 cwd          = Path.cwd().parent
 save_picture = True
 filter_data  = True
@@ -116,10 +116,13 @@ for i in range(0, len(image_files), grouping):
     plt.close(fig)
 
     std_img = np.std(images, axis=0)
-
+    
     fig, ax2 = plt.subplots()
-    ax2.imshow(std_img, cmap=cmap2)
+    im = ax2.imshow(std_img, cmap=cmap2)
     ax2.set_title(f'Standard Deviation Group {group_id}')
+    
+    fig.colorbar(im, ax=ax2, label='Standard deviation')
+    
     plt.show()
     plt.close(fig)
 
