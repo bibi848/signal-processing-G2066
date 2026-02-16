@@ -18,13 +18,13 @@ from Classes.TFM1D import CTFM1D
 
 # Point the script to the correct subfolder.
 input_data_folder    = '1D Processed Data'
-input_data_subfolder = 'Al Pure 10MHz 12022026'
+input_data_subfolder = 'Cu Pure 10MHz 16022026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
 display_picture      = False
 save_picture         = True
 all_pictures         = True
-filtered_data        = True
+filtered_data        = False
 engine               = 'gpu'    # python/cpp/gpu
 osys                 = 'ubuntu' # windows/ubuntu, choose windows if on mac
 threads              = 512
@@ -40,8 +40,8 @@ vmin    = -15.0
 # Image Parameters
 c        = 6320 # m/s
 depth    = 50e-3 # mm
-x_pixels = 400
-z_pixels = 600
+x_pixels = 500
+z_pixels = 700
 cmap     = 'viridis'
 
 # Input and Output paths.
