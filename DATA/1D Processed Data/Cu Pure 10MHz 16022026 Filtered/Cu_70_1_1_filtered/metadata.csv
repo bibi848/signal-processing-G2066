@@ -1,0 +1,7 @@
+Field,Value
+origin,Cu_70_1_1.mat
+centre_frequency_Hz,10000000.0
+manufacturer,Imasonic
+number_of_elements,128
+number_of_fmc_traces,16384
+number_of_time_samples,2000
