@@ -367,21 +367,21 @@ class SyntheticVolumeGenerator:
 # ============================================================================
 
 # Create generator
-generator = SyntheticVolumeGenerator(dimensions=(300, 100, 100), seed=42)
+generator = SyntheticVolumeGenerator(dimensions=(100, 100, 110), seed=42)
 
 # Add defects (using cylindrical_void instead of inclusion)
 generator.add_spherical_void(center=(30, 50, 50), radius=8, intensity=0.95)
-generator.add_cylindrical_void(center_x=70, center_y=50, radius=5, intensity=0.92, axis='x')
+generator.add_cylindrical_void(center_x=70, center_y=50, radius=5, intensity=0.92, axis='y')
 
 # Generate volume
-volume = generator.generate(base_intensity_range=(0.05, 0.25), smoothing_sigma=2.0)
+volume = generator.generate(base_intensity_range=(0.9, 0.9), smoothing_sigma=2.0)
 generator.save_volume(volume, "synthetic_volume.npy")
 
 # Split into sub-volumes with overlapped identical dimensions
 sub_volumes = generator.split_volume_for_stitching(
     volume,
-    num_splits=(3, 1, 1),
-    overlap_pixels=(20, 0, 0),
+    num_splits=(1, 1, 2),
+    overlap_pixels=(0, 0, 80),
     save_dir="SYNTHETIC NPY/stitching_test"
 )
 
@@ -394,5 +394,3 @@ generator.verify_reconstruction(volume, reconstructed)
 # Visualize
 generator.visualize(volume)
 generator.visualize_sub_volumes(sub_volumes)
-
-
