@@ -895,5 +895,3 @@ print("="*80)
 
 
 ## //TODO add randomness to the parameters in each subvolume to simulate inconsistencies between scans (e.g. slight variations in noise levels, bloom intensity, etc.)
-
-
