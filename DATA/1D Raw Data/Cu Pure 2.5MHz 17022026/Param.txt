@@ -1,0 +1,8 @@
+Imasonic 1D 64Els 2.5MHz 0.5mm pitch
+Copper (4600)
+
+FMC
+Sample Freq: 25MHz
+Time Points: 1000
+Gain: 40
+Averages: 40
