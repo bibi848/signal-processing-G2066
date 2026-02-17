@@ -1,0 +1,9 @@
+Imasonic 1D 128 Els 10MHz 0.30mm pitch
+Copper
+Peak NDT Micropulse TCPIP
+FMC
+Sample Freq: 50 MHz
+Time Points: 2000
+Sample Bits: 8
+Gain (dB): 70
+Averages: 20

@@ -362,9 +362,6 @@ class SyntheticVolumeGenerator:
             )
         napari.run()
 
-# ============================================================================
-# Example Usage
-# ============================================================================
 
 # Create generator
 generator = SyntheticVolumeGenerator(dimensions=(100, 100, 110), seed=42)
