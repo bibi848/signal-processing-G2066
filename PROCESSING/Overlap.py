@@ -28,7 +28,7 @@ if filter_data:
 else:
     IN_DIR  = os.path.join(cwd, 'DATA', in_data_type, in_data_name)
 
-# Find all files in directory which are .mat files. 
+# Find all files in directory which are .png files. 
 image_files = [
     f for f in os.listdir(IN_DIR)
     if f.lower().endswith(".png")
