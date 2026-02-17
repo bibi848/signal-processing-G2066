@@ -4,28 +4,23 @@ This module provides a class for generating synthetic 3D volumes with defects
 and realistic imaging artifacts.
 
 COORDINATE SYSTEM (matching real TFM setup):
-- Axis 0 (depth/z): Penetration depth into material (array scans from the SIDE) - BEST RESOLUTION
-- Axis 1 (height/y): Vertical direction (perpendicular to array surface) - MODERATE RESOLUTION
-- Axis 2 (width/x): Lateral direction (along array length) - WORST RESOLUTION
+- Axis 0 (depth/z): Penetration depth into material (array scans from the SIDE)
+- Axis 1 (height/y): Vertical direction (perpendicular to array surface)  
+- Axis 2 (width/x): Lateral direction (along array length)
 
 Array is positioned on the SIDE of the sample, scanning horizontally into the material.
-The characteristic TFM "bloom" spreads in the Y-X PLANE (perpendicular to beam propagation):
-- 2D Hilbert envelope applied to axes 1 (y) and 2 (x)
-- Creates elliptical bloom: strongest laterally, moderate in elevation, minimal in depth
 
 Methodology:
 1. Generate synthetic 3D volume with customizable defects matching experimental TFM data
-2. Add realistic ultrasonic imaging artifacts (noise, attenuation, anisotropic PSF, etc.)
-3. Apply 2D Hilbert envelope along height and lateral axes (creates realistic bloom in y-x plane)
-4. Save as .npy file
-5. Visualize using napari
+2. Add realistic ultrasonic imaging artifacts (BLOOM effect, noise, attenuation, etc.)
+3. Save as .npy file
+4. Visualize using napari
 
 OPTIMIZATIONS:
 - Vectorized cylindrical void generation (no loops)
 - Efficient convolution using FFT for large kernels
 - Reduced redundant operations
 - Memory-efficient processing
-- 2D Hilbert transform (axes 1 & 2) for realistic TFM bloom in y-x plane
 """
 
 import os
@@ -52,7 +47,7 @@ class SyntheticVolumeGenerator:
     - Defects (voids, cracks) = HIGH intensity (0.85-1.0, bright spots)
     """
     
-    def __init__(self, dimensions=(100, 100, 100), seed=None, array_position=None):
+    def __init__(self, dimensions=(100, 100, 100), seed=None):
         """
         Initialize the synthetic volume generator.
         
@@ -62,21 +57,17 @@ class SyntheticVolumeGenerator:
                        height (y): vertical extent (axis 1)
                        width (x): lateral extent (axis 2)
             seed: Random seed for reproducibility
-            array_position: Tuple (y, x) position of the ultrasound array
-                           If None, defaults to center of volume (y_center, x_center)
-                           Array is positioned on the SIDE of the sample (z=0)
         """
         self.dimensions = dimensions
         self.defects = []
         
-        # Set array position (defaults to center of y-x plane)
-        if array_position is None:
-            self.array_position = (dimensions[1] // 2, dimensions[2] // 2)
-        else:
-            self.array_position = array_position
-        
         if seed is not None:
             np.random.seed(seed)
+        
+        print(f"Initialized SyntheticVolumeGenerator with dimensions: {dimensions}")
+        print(f"  Depth (z, axis 0): {dimensions[0]} pixels")
+        print(f"  Height (y, axis 1): {dimensions[1]} pixels")
+        print(f"  Width (x, axis 2): {dimensions[2]} pixels")
     
     def add_spherical_void(self, center, radius, intensity=0.95):
         """
@@ -93,6 +84,7 @@ class SyntheticVolumeGenerator:
             'radius': radius,
             'intensity': intensity
         })
+        print(f"Added spherical void at (z={center[0]}, y={center[1]}, x={center[2]}), radius={radius}px")
         return self
     
     def add_cylindrical_void(self, center_pos, other_pos, radius, intensity=0.95, axis='x'):
@@ -117,88 +109,15 @@ class SyntheticVolumeGenerator:
             'intensity': intensity,
             'axis': axis
         })
+        print(f"Added cylindrical void: axis={axis}, center=({center_pos}, {other_pos}), radius={radius}px")
         return self
     
-    def set_array_position(self, y_pos, x_pos):
-        """
-        Update the array position to simulate array movement.
-        
-        Parameters:
-            y_pos: Y-coordinate of array position (vertical)
-            x_pos: X-coordinate of array position (lateral)
-        """
-        self.array_position = (y_pos, x_pos)
-        return self
-    
-    def _calculate_angular_attenuation(self, defect_center, defect_type='spherical'):
-        """
-        Calculate angular-dependent attenuation for a defect based on array position.
-        
-        Physics:
-        - When array is directly above defect: maximum signal return (angle ≈ 0°)
-        - When array is off-axis: reduced signal due to:
-          1. Reduced reflectivity at oblique angles
-          2. Beam divergence (weaker signal off-center)
-          3. Reduced aperture overlap
-        
-        Parameters:
-            defect_center: (z, y, x) position of defect center
-            defect_type: 'spherical' or 'cylindrical' (different angular responses)
-        
-        Returns:
-            attenuation_factor: float [0, 1] - multiplicative factor for defect intensity
-                              1.0 = directly above (no attenuation)
-                              <1.0 = off-axis (reduced intensity)
-        """
-        z_defect, y_defect, x_defect = defect_center
-        y_array, x_array = self.array_position
-        
-        # Calculate lateral offset (in y-x plane)
-        lateral_offset = np.sqrt((y_defect - y_array)**2 + (x_defect - x_array)**2)
-        
-        # Calculate angle from array normal (assuming array points into +z direction)
-        # angle ≈ arctan(lateral_offset / depth)
-        angle_rad = np.arctan2(lateral_offset, z_defect + 1e-6)  # Add small epsilon to avoid division by zero
-        angle_deg = np.degrees(angle_rad)
-        
-        # Attenuation model based on angle - REALISTIC ULTRASOUND RESPONSE
-        # Ultrasound arrays typically have ~60-80° effective beam width
-        # For spherical defects: cosine response (Lambertian-like reflector)
-        # For cylindrical defects: slightly broader response
-        if defect_type == 'spherical':
-            # Moderate drop-off for spherical defects (cos^1.5 for gentler falloff)
-            attenuation = np.cos(angle_rad) ** 1.5
-        else:
-            # Broader response for cylindrical defects
-            attenuation = np.cos(angle_rad) ** 1.0
-        
-        # Beam divergence factor (Gaussian beam profile)
-        # Assumes -6dB beam width of ~50° (typical for phased array ultrasound)
-        # This gives good signal out to ~40° and gradually falls off beyond that
-        beam_width_deg = 50.0  # -6dB beam width
-        beam_sigma = beam_width_deg / 2.355  # Convert FWHM to sigma (for Gaussian)
-        beam_factor = np.exp(-(angle_deg**2) / (2 * beam_sigma**2))
-        
-        # Combined attenuation (multiplicative)
-        # Use weighted combination to avoid over-attenuation
-        total_attenuation = 0.6 * attenuation + 0.4 * beam_factor
-        
-        # Ensure minimum visibility even at extreme angles (noise floor)
-        total_attenuation = np.maximum(total_attenuation, 0.05)
-        
-        return total_attenuation
-    
-    def generate(self, base_intensity_range=(0.05, 0.1), smoothing_sigma=2.0, use_angular_effects=False):
+    def generate(self, base_intensity_range=(0.05, 0.1), smoothing_sigma=2.0):
         """
         Generate the synthetic volume with all added defects - OPTIMIZED.
-        
-        Parameters:
-            base_intensity_range: Intensity range for base material
-            smoothing_sigma: Gaussian smoothing for base material
-            use_angular_effects: If True, apply angular-dependent intensity modulation
-                                based on array position (simulates off-axis imaging)
-                                DEFAULT: False (ground truth generation without angular effects)
         """
+        print(f"\nGenerating synthetic volume with {len(self.defects)} defects...")
+        
         # Create base material with VERY LOW intensity
         base_min, base_max = base_intensity_range
         base_material = np.random.rand(*self.dimensions).astype(np.float32) * (base_max - base_min) + base_min
@@ -212,24 +131,16 @@ class SyntheticVolumeGenerator:
             if defect['type'] == 'spherical_void':
                 center = defect['center']
                 radius = defect['radius']
-                base_intensity = defect['intensity']
-                
-                # Apply angular attenuation if enabled
-                if use_angular_effects:
-                    angular_factor = self._calculate_angular_attenuation(center, defect_type='spherical')
-                    effective_intensity = base_intensity * angular_factor
-                else:
-                    effective_intensity = base_intensity
                 
                 distances = np.sqrt((z - center[0])**2 + (y - center[1])**2 + (x - center[2])**2)
                 
                 mask = distances <= radius
-                volume[mask] = effective_intensity
+                volume[mask] = defect['intensity']
                 
                 # Soft edge
                 edge_mask = (distances > radius) & (distances <= radius + 2)
                 volume[edge_mask] = np.maximum(volume[edge_mask], 
-                                               effective_intensity * (1 - (distances[edge_mask] - radius) / 2))
+                                               defect['intensity'] * (1 - (distances[edge_mask] - radius) / 2))
             
             elif defect['type'] == 'cylindrical_void':
                 # OPTIMIZED: Vectorized cylindrical void generation
@@ -237,21 +148,6 @@ class SyntheticVolumeGenerator:
                 center_pos = defect['center_pos']
                 other_pos = defect['other_pos']
                 radius = defect['radius']
-                base_intensity = defect['intensity']
-                
-                # For cylinders, calculate angular attenuation at cylinder center
-                if use_angular_effects:
-                    if axis == 'x':
-                        cylinder_center = (center_pos, other_pos, self.dimensions[2] // 2)
-                    elif axis == 'y':
-                        cylinder_center = (center_pos, self.dimensions[1] // 2, other_pos)
-                    elif axis == 'z':
-                        cylinder_center = (self.dimensions[0] // 2, center_pos, other_pos)
-                    
-                    angular_factor = self._calculate_angular_attenuation(cylinder_center, defect_type='cylindrical')
-                    effective_intensity = base_intensity * angular_factor
-                else:
-                    effective_intensity = base_intensity
                 
                 if axis == 'x':  # Cylinder extends along lateral direction (x-axis)
                     # Create full 3D grid for this axis pair
@@ -260,7 +156,7 @@ class SyntheticVolumeGenerator:
                     distances = np.sqrt((z_grid - center_pos)**2 + (y_grid - other_pos)**2)
                     mask = distances <= radius
                     # Broadcast across x dimension
-                    volume[mask.squeeze()] = effective_intensity
+                    volume[mask.squeeze()] = defect['intensity']
                 
                 elif axis == 'y':  # Cylinder extends vertically (y-axis)
                     z_grid = np.arange(self.dimensions[0])[:, None, None]
@@ -268,7 +164,7 @@ class SyntheticVolumeGenerator:
                     distances = np.sqrt((z_grid - center_pos)**2 + (x_grid - other_pos)**2)
                     mask = distances <= radius
                     # Broadcast across y dimension
-                    volume[:, :, :][np.broadcast_to(mask, self.dimensions)] = effective_intensity
+                    volume[:, :, :][np.broadcast_to(mask, self.dimensions)] = defect['intensity']
                 
                 elif axis == 'z':  # Cylinder extends into depth (z-axis)
                     y_grid = np.arange(self.dimensions[1])[None, :, None]
@@ -276,10 +172,12 @@ class SyntheticVolumeGenerator:
                     distances = np.sqrt((y_grid - center_pos)**2 + (x_grid - other_pos)**2)
                     mask = distances <= radius
                     # Broadcast across z dimension
-                    volume[:, :, :][np.broadcast_to(mask, self.dimensions)] = effective_intensity
+                    volume[:, :, :][np.broadcast_to(mask, self.dimensions)] = defect['intensity']
         
         # Ensure values stay in valid range
         volume = np.clip(volume, 0.0, 1.0)
+        
+        print(f"Volume generated successfully. Min: {volume.min():.3f}, Max: {volume.max():.3f}")
         return volume
     
     def add_ultrasonic_artifacts(self, volume, 
@@ -295,7 +193,7 @@ class SyntheticVolumeGenerator:
         Add realistic ultrasonic imaging artifacts - OPTIMIZED.
         
         APPROACH: Artifacts are created primarily through CTFM processing
-        (2D Hilbert envelope detection + dB conversion), not artificial bloom.
+        (Hilbert envelope detection + dB conversion), not artificial bloom.
         
         This method adds basic physical artifacts:
         - Electronic and grain noise
@@ -304,11 +202,8 @@ class SyntheticVolumeGenerator:
         - PSF blurring (limited aperture) - ANISOTROPIC to match TFM physics
         
         The main "bloom" or halo effect comes from:
-        1. 2D Hilbert envelope (spreads in y-x plane perpendicular to beam)
-        2. Anisotropic PSF blur (reinforces the resolution differences)
-        
-        Together these create elliptical bloom in the cross-section plane (y-x) while
-        maintaining good axial resolution along the beam direction (z).
+        1. CTFM Hilbert envelope (spreads along depth axis)
+        2. Anisotropic PSF blur (spreads along lateral axis - parallel to array)
         
         Parameters:
             electronic_noise_level: Amplitude of random electronic noise (0-0.03)
@@ -320,17 +215,19 @@ class SyntheticVolumeGenerator:
             speckle_noise_level: Coherent speckle noise level (0-0.05)
             blur_sigma: Anisotropic PSF blurring - tuple of (sigma_z, sigma_y, sigma_x)
                         or single float for isotropic blur
-                        COORDINATE CONVENTION: (depth, height, lateral) = (z, y, x)
-                        sigma_z (depth, axis 0): 0.5-1.0 (good axial resolution)
-                        sigma_y (height, axis 1): 0.6-1.2 (moderate elevation resolution)
-                        sigma_x (lateral, axis 2): 2.0-5.0 (poor lateral resolution)
-                        Note: Lateral blur is largest because array has finite aperture
+                        sigma_z (depth): 0.2-0.5 (good axial resolution, minimal vertical blur)
+                        sigma_y (height): 0.6-1.2 (moderate)
+                        sigma_x (lateral): 2.0-4.0 (poor - creates horizontal blooming)
         """
+        print("\nAdding realistic ultrasonic imaging artifacts (OPTIMIZED)...")
+        print(f"  Approach: CTFM-based (artifacts from Hilbert envelope processing)")
+        
         # Work in float32 for speed
         volume_artifacts = volume.astype(np.float32)
         
         # 1. Combined noise generation (single pass)
         if electronic_noise_level > 0 or grain_noise_level > 0:
+            print(f"  ✓ Generating combined noise...")
             # Electronic noise
             if electronic_noise_level > 0:
                 volume_artifacts += np.random.randn(*self.dimensions).astype(np.float32) * electronic_noise_level
@@ -340,15 +237,20 @@ class SyntheticVolumeGenerator:
                 grain_noise = np.random.randn(*self.dimensions).astype(np.float32) * grain_noise_level
                 grain_noise = gaussian_filter(grain_noise, sigma=1.5)
                 volume_artifacts += grain_noise
+            
+            print(f"    Electronic: {electronic_noise_level:.3f}, Grain: {grain_noise_level:.3f}")
         
         # 2. Depth-dependent attenuation (vectorized)
         if depth_attenuation > 0:
             depth_factor = np.exp(-depth_attenuation * np.linspace(0, 1, self.dimensions[0], dtype=np.float32))
             depth_factor = depth_factor[:, None, None]  # Broadcasting shape
             volume_artifacts *= depth_factor
+            print(f"  ✓ Depth attenuation applied (coeff={depth_attenuation:.3f})")
         
         # 3. *** BLOOM EFFECT *** - OPTIMIZED with FFT convolution
         if bloom_radius > 0 and bloom_intensity > 0:
+            print(f"\n  ★ BLOOM EFFECT (radius={bloom_radius}px, intensity={bloom_intensity:.2f})")
+            
             # Find defect locations (threshold) - but weight by intensity
             defect_mask = (volume > 0.7).astype(np.float32)
             defect_mask *= volume  # Weight by actual defect intensity
@@ -359,9 +261,11 @@ class SyntheticVolumeGenerator:
             
             # Use FFT convolution for large volumes (much faster)
             if np.prod(self.dimensions) > 1e6:  # For volumes larger than 100^3
+                print(f"    Using FFT-based convolution (large volume)...")
                 bloom_map = fftconvolve(defect_mask, bloom_kernel, mode='same')
             else:
                 from scipy.ndimage import convolve
+                print(f"    Using spatial convolution (small volume)...")
                 bloom_map = convolve(defect_mask, bloom_kernel, mode='constant')
             
             # Scale bloom - ensure it's WEAKER than defect
@@ -373,6 +277,8 @@ class SyntheticVolumeGenerator:
             # Only add bloom where it doesn't already exist as a defect
             bloom_mask = volume < 0.7  # Only add bloom outside defects
             volume_artifacts[bloom_mask] += bloom_map[bloom_mask]
+            
+            print(f"  ✓ Bloom applied (peak intensity: {bloom_map.max():.3f})")
         
         # 4. Speckle noise (multiplicative, fast)
         if speckle_noise_level > 0:
@@ -380,19 +286,27 @@ class SyntheticVolumeGenerator:
             speckle = (speckle - 1.0) * speckle_noise_level
             speckle = gaussian_filter(speckle, sigma=0.8)
             volume_artifacts *= (1 + speckle)
+            print(f"  ✓ Speckle noise added (level={speckle_noise_level:.3f})")
         
         # 5. Limited aperture effect (anisotropic PSF blur)
         if blur_sigma is not None:
             # Handle both tuple (anisotropic) and float (isotropic) inputs
             if isinstance(blur_sigma, (tuple, list)):
                 sigma_z, sigma_y, sigma_x = blur_sigma
+                print(f"  ✓ Anisotropic PSF blurring applied:")
+                print(f"    sigma_z (depth): {sigma_z:.2f} - good axial resolution")
+                print(f"    sigma_y (height): {sigma_y:.2f} - moderate blur")
+                print(f"    sigma_x (lateral): {sigma_x:.2f} - creates horizontal blooming")
             else:
                 sigma_z = sigma_y = sigma_x = blur_sigma
+                print(f"  ✓ Isotropic PSF blurring applied (sigma={blur_sigma:.2f})")
             
             volume_artifacts = gaussian_filter(volume_artifacts, sigma=(sigma_z, sigma_y, sigma_x))
         
         # Ensure values stay in valid range
         volume_artifacts = np.clip(volume_artifacts, 0.0, 1.0)
+        
+        print(f"\nArtifacts applied. Range: Min={volume_artifacts.min():.3f}, Max={volume_artifacts.max():.3f}")
         return volume_artifacts
     
     def _create_bloom_kernel(self, size, falloff='gaussian'):
@@ -454,198 +368,38 @@ class SyntheticVolumeGenerator:
         
         return kernel
     
-    def generate_subvolume_region(self, origin, shape, base_intensity_range=(0.05, 0.1), 
-                                   smoothing_sigma=2.0, use_angular_effects=True):
-        """
-        Generate a specific subvolume region with independent array position.
-        This simulates an independent scan of a portion of the full volume.
-        
-        Parameters:
-            origin: (z, y, x) starting position of the subvolume in the full volume
-            shape: (depth, height, width) size of the subvolume
-            base_intensity_range: Intensity range for base material
-            smoothing_sigma: Gaussian smoothing for base material
-            use_angular_effects: If True, position array at subvolume center (default: True)
-        
-        Returns:
-            Generated subvolume with defects and angular effects
-        """
-        z_origin, y_origin, x_origin = origin
-        z_size, y_size, x_size = shape
-        
-        # Calculate array position at the center of this subvolume
-        if use_angular_effects:
-            array_y = y_origin + y_size // 2
-            array_x = x_origin + x_size // 2
-            self.set_array_position(array_y, array_x)
-        
-        # Temporarily set dimensions to subvolume size
-        original_dims = self.dimensions
-        self.dimensions = shape
-        
-        # Create base material
-        base_min, base_max = base_intensity_range
-        base_material = np.random.rand(*shape).astype(np.float32) * (base_max - base_min) + base_min
-        volume = gaussian_filter(base_material, sigma=smoothing_sigma)
-        
-        # Create coordinate grids for the subvolume (in local coordinates)
-        z_local, y_local, x_local = np.ogrid[:z_size, :y_size, :x_size]
-        
-        # Apply each defect (only if it intersects with this subvolume)
-        for defect in self.defects:
-            if defect['type'] == 'spherical_void':
-                center = defect['center']
-                radius = defect['radius']
-                base_intensity = defect['intensity']
-                
-                # Convert global defect center to local subvolume coordinates
-                center_local = (
-                    center[0] - z_origin,
-                    center[1] - y_origin,
-                    center[2] - x_origin
-                )
-                
-                # Check if defect is within or near this subvolume
-                if (center_local[0] < -radius - 5 or center_local[0] > z_size + radius + 5 or
-                    center_local[1] < -radius - 5 or center_local[1] > y_size + radius + 5 or
-                    center_local[2] < -radius - 5 or center_local[2] > x_size + radius + 5):
-                    continue  # Defect too far from this subvolume
-                
-                # Apply angular attenuation based on GLOBAL position
-                if use_angular_effects:
-                    angular_factor = self._calculate_angular_attenuation(center, defect_type='spherical')
-                    effective_intensity = base_intensity * angular_factor
-                else:
-                    effective_intensity = base_intensity
-                
-                # Calculate distances using local coordinates
-                distances = np.sqrt(
-                    (z_local - center_local[0])**2 + 
-                    (y_local - center_local[1])**2 + 
-                    (x_local - center_local[2])**2
-                )
-                
-                mask = distances <= radius
-                volume[mask] = effective_intensity
-                
-                # Soft edge
-                edge_mask = (distances > radius) & (distances <= radius + 2)
-                volume[edge_mask] = np.maximum(volume[edge_mask], 
-                                               effective_intensity * (1 - (distances[edge_mask] - radius) / 2))
-            
-            elif defect['type'] == 'cylindrical_void':
-                axis = defect.get('axis', 'z')
-                center_pos = defect['center_pos']
-                other_pos = defect['other_pos']
-                radius = defect['radius']
-                base_intensity = defect['intensity']
-                
-                # Determine global center for angular calculation
-                if axis == 'x':
-                    cylinder_center = (center_pos, other_pos, x_origin + x_size // 2)
-                elif axis == 'y':
-                    cylinder_center = (center_pos, y_origin + y_size // 2, other_pos)
-                elif axis == 'z':
-                    cylinder_center = (z_origin + z_size // 2, center_pos, other_pos)
-                
-                if use_angular_effects:
-                    angular_factor = self._calculate_angular_attenuation(cylinder_center, defect_type='cylindrical')
-                    effective_intensity = base_intensity * angular_factor
-                else:
-                    effective_intensity = base_intensity
-                
-                # Convert to local coordinates
-                center_pos_local = center_pos - (z_origin if axis in ['x', 'y'] else (y_origin if axis == 'z' else 0))
-                other_pos_local = other_pos - (y_origin if axis == 'x' else (x_origin if axis in ['y', 'z'] else 0))
-                
-                # Check if cylinder intersects this subvolume
-                if axis == 'x':
-                    if (center_pos_local < -radius - 5 or center_pos_local > z_size + radius + 5 or
-                        other_pos_local < -radius - 5 or other_pos_local > y_size + radius + 5):
-                        continue
-                    
-                    z_grid = np.arange(z_size)[:, None, None]
-                    y_grid = np.arange(y_size)[None, :, None]
-                    distances = np.sqrt((z_grid - center_pos_local)**2 + (y_grid - other_pos_local)**2)
-                    mask = distances <= radius
-                    volume[mask.squeeze()] = effective_intensity
-                
-                elif axis == 'y':
-                    if (center_pos_local < -radius - 5 or center_pos_local > z_size + radius + 5 or
-                        other_pos_local < -radius - 5 or other_pos_local > x_size + radius + 5):
-                        continue
-                    
-                    z_grid = np.arange(z_size)[:, None, None]
-                    x_grid = np.arange(x_size)[None, None, :]
-                    distances = np.sqrt((z_grid - center_pos_local)**2 + (x_grid - other_pos_local)**2)
-                    mask = distances <= radius
-                    volume[:, :, :][np.broadcast_to(mask, shape)] = effective_intensity
-                
-                elif axis == 'z':
-                    if (center_pos_local < -radius - 5 or center_pos_local > y_size + radius + 5 or
-                        other_pos_local < -radius - 5 or other_pos_local > x_size + radius + 5):
-                        continue
-                    
-                    y_grid = np.arange(y_size)[None, :, None]
-                    x_grid = np.arange(x_size)[None, None, :]
-                    distances = np.sqrt((y_grid - center_pos_local)**2 + (x_grid - other_pos_local)**2)
-                    mask = distances <= radius
-                    volume[:, :, :][np.broadcast_to(mask, shape)] = effective_intensity
-        
-        # Restore original dimensions
-        self.dimensions = original_dims
-        
-        # Ensure values stay in valid range
-        volume = np.clip(volume, 0.0, 1.0)
-        
-        return volume
-    
     def apply_hilbert_envelope(self, volume):
         """
-        Apply 2D Hilbert transform along LATERAL and HEIGHT axes - uses scipy's optimized implementation.
+        Apply Hilbert transform along depth axis - uses scipy's optimized implementation.
         
-        COORDINATE SYSTEM:
-        - Axis 0 (z, depth): penetration into material - GOOD resolution, NO Hilbert
-        - Axis 1 (y, height): vertical/elevation direction - MODERATE resolution, Hilbert applied
-        - Axis 2 (x, lateral): along array length - POOR resolution, Hilbert applied
-        
-        In TFM imaging, the characteristic "bloom" spreads in the plane perpendicular to
-        the beam propagation (y-x plane) because lateral and elevation resolutions are
-        worse than axial resolution. The 2D Hilbert envelope creates this spreading effect.
-        
-        The transform is applied sequentially:
-        1. Along lateral axis (x, axis 2) - primary bloom direction
-        2. Along height axis (y, axis 1) - secondary bloom direction
-        
-        This creates an elliptical bloom in the y-x plane while maintaining good depth resolution.
-        
-        Note: We apply mild Gaussian blur in the y-x plane BEFORE Hilbert transform
-        to smooth out sharp transitions and create realistic TFM appearance.
+        Note: To reduce excessive vertical blooming, we apply a mild Gaussian blur
+        along the depth axis BEFORE Hilbert transform to smooth out sharp transitions.
         """
-        # Pre-smooth in the y-x plane (perpendicular to beam propagation)
-        # Stronger smoothing in lateral direction (worse resolution)
-        volume_smoothed = gaussian_filter(volume, sigma=(0, 0.8, 1.5))  # (depth=0, height, lateral)
+        print("\nApplying Hilbert envelope detection along depth axis (axis 0)...")
         
-        # Apply Hilbert along LATERAL axis first (strongest bloom)
-        volume_analytic_x = hilbert(volume_smoothed, axis=2)
-        volume_envelope_x = np.abs(volume_analytic_x).astype(np.float32)
+        # Pre-smooth along depth axis to reduce excessive vertical blooming from Hilbert
+        volume_smoothed = gaussian_filter(volume, sigma=(0.8, 0, 0))  # Only smooth depth axis
+        print("  Pre-smoothing applied to reduce vertical blooming")
         
-        # Apply Hilbert along HEIGHT axis second (moderate bloom)
-        volume_analytic_xy = hilbert(volume_envelope_x, axis=1)
-        volume_envelope = np.abs(volume_analytic_xy).astype(np.float32)
+        volume_analytic = hilbert(volume_smoothed, axis=0)
+        volume_envelope = np.abs(volume_analytic).astype(np.float32)
+        print(f"Envelope applied. Range: Min={volume_envelope.min():.3f}, Max={volume_envelope.max():.3f}")
         return volume_envelope
     
     def convert_to_db(self, volume, vmin=-40.0, vmax=0.0):
         """
         Convert to decibel scale - optimized with clipping.
         """
+        print("\nConverting to dB scale...")
         volume_max = np.max(volume)
         volume_db = 20 * np.log10(volume / volume_max + 1e-10, dtype=np.float32)
         volume_db = np.clip(volume_db, vmin, vmax)
+        print(f"dB conversion applied. Range: {volume_db.min():.2f} to {volume_db.max():.2f} dB")
         return volume_db
     
     def save_volume(self, volume, filename="synthetic_volume.npy"):
         np.save(filename, volume)
+        print(f"\nSaved: {filename}")
     
     def visualize(self, volume, name="Volume", contrast_limits=None):
         """Visualize a single volume."""
@@ -669,6 +423,9 @@ class SyntheticVolumeGenerator:
         """
         Split volume into overlapping sub-volumes - OPTIMIZED with views instead of copies.
         """
+        print(f"\nSplitting volume into {num_splits[0]}x{num_splits[1]}x{num_splits[2]} sub-volumes...")
+        print(f"Overlap pixels between adjacent volumes: {overlap_pixels}")
+        
         z_dim, y_dim, x_dim = volume.shape
         z_splits, y_splits, x_splits = num_splits
         overlap_z, overlap_y, overlap_x = overlap_pixels
@@ -679,6 +436,7 @@ class SyntheticVolumeGenerator:
         subvol_x = (x_dim + (x_splits - 1) * overlap_x) // x_splits
         
         subvol_shape = (subvol_z, subvol_y, subvol_x)
+        print(f"Each sub-volume shape: {subvol_shape}")
         
         # Calculate step size
         step_z = subvol_z - overlap_z
@@ -691,6 +449,7 @@ class SyntheticVolumeGenerator:
         expected_x = (x_splits - 1) * step_x + subvol_x
         
         if expected_z > z_dim or expected_y > y_dim or expected_x > x_dim:
+            print(f"Warning: Volume padded from ({z_dim},{y_dim},{x_dim}) to ({expected_z},{expected_y},{expected_x})")
             padded = np.zeros((expected_z, expected_y, expected_x), dtype=volume.dtype)
             padded[:z_dim, :y_dim, :x_dim] = volume
             volume = padded
@@ -721,6 +480,7 @@ class SyntheticVolumeGenerator:
                         'step': (step_z, step_y, step_x)
                     }
                     sub_volumes.append(metadata)
+                    print(f"  Sub-volume [{zi},{yi},{xi}]: origin={metadata['origin']}, shape={sub_vol.shape}")
         
         if save_dir:
             os.makedirs(save_dir, exist_ok=True)
@@ -742,6 +502,7 @@ class SyntheticVolumeGenerator:
                 'num_subvolumes': len(sub_volumes)
             }
             np.savez(os.path.join(save_dir, 'reconstruction_info.npz'), **recon_info)
+            print(f"\nSaved {len(sub_volumes)} sub-volumes to: {save_dir}")
         
         return sub_volumes
     
@@ -752,13 +513,12 @@ class SyntheticVolumeGenerator:
                                       artifact_params=None,
                                       save_dir=None,
                                       visualize_subvolumes=False,
-                                      apply_ctfm=True,
-                                      use_angular_effects=True):
+                                      apply_ctfm=True):
         """
         Generate test data for stitching - OPTIMIZED.
         
         Parameters:
-            volume_clean: Clean volume to process (ground truth without angular effects)
+            volume_clean: Clean volume to process
             num_splits: Tuple of (z, y, x) splits
             overlap_pixels: Tuple of overlap in each dimension
             artifact_mode: 'whole_volume' or 'per_subvolume'
@@ -766,10 +526,11 @@ class SyntheticVolumeGenerator:
             save_dir: Directory to save subvolumes
             visualize_subvolumes: Whether to visualize in napari
             apply_ctfm: Whether to apply CTFM processing (Hilbert + dB) to subvolumes
-            use_angular_effects: If True, regenerate each subvolume with angular effects
-                                based on array position (simulates independent scans)
-                                Only applies in 'per_subvolume' mode.
         """
+        print("\n" + "="*80)
+        print(f"GENERATING STITCHING TEST DATA - Mode: {artifact_mode.upper()}")
+        print("="*80)
+        
         # Default artifact parameters - CTFM-FOCUSED
         default_params = {
             'electronic_noise_level': 0.02,
@@ -779,20 +540,23 @@ class SyntheticVolumeGenerator:
             'bloom_intensity': 0.0,
             'bloom_falloff': 'gaussian',
             'speckle_noise_level': 0.04,
-            'blur_sigma': (0.8, 1.0, 3.0)
+            'blur_sigma': (0.3, 0.8, 4.5)  # Anisotropic: strong lateral blur for horizontal blooming
         }
         
         if artifact_params is not None:
             default_params.update(artifact_params)
         
         if artifact_mode == 'whole_volume':
+            print("Adding artifacts to whole volume before splitting...")
             volume_with_artifacts = self.add_ultrasonic_artifacts(volume_clean, **default_params)
             
             # Apply CTFM processing if requested
             if apply_ctfm:
+                print("Applying CTFM processing to whole volume (Hilbert + dB)...")
                 volume_with_artifacts = self.apply_hilbert_envelope(volume_with_artifacts)
                 volume_with_artifacts = self.convert_to_db(volume_with_artifacts, vmin=-40.0, vmax=0.0)
             
+            print("\nSplitting volume with artifacts...")
             sub_volumes = self.split_volume_for_stitching(
                 volume_with_artifacts,
                 num_splits=num_splits,
@@ -801,6 +565,7 @@ class SyntheticVolumeGenerator:
             )
             
         elif artifact_mode == 'per_subvolume':
+            print("Splitting clean volume first...")
             sub_volumes_clean = self.split_volume_for_stitching(
                 volume_clean,
                 num_splits=num_splits,
@@ -808,37 +573,26 @@ class SyntheticVolumeGenerator:
                 save_dir=None
             )
             
+            print(f"\nAdding independent artifacts to each of {len(sub_volumes_clean)} sub-volumes...")
             sub_volumes = []
             
             for i, sv in enumerate(sub_volumes_clean):
                 idx = sv['index']
-                origin = sv['origin']
-                shape = sv['volume'].shape
+                print(f"\n  Processing sub-volume [{idx[0]},{idx[1]},{idx[2]}]...")
                 
-                if use_angular_effects:
-                    # Regenerate this subvolume with angular effects
-                    # Array positioned at the center of the subvolume
-                    vol_regenerated = self.generate_subvolume_region(
-                        origin=origin,
-                        shape=shape,
-                        use_angular_effects=True
-                    )
-                else:
-                    # Use the clean split volume (no regeneration)
-                    vol_regenerated = sv['volume']
-                
-                # Temporarily update dimensions for artifact processing
+                # Temporarily update dimensions
                 original_dims = self.dimensions
-                self.dimensions = shape
+                self.dimensions = sv['volume'].shape
                 
                 # Add artifacts
                 vol_with_artifacts = self.add_ultrasonic_artifacts(
-                    vol_regenerated, 
+                    sv['volume'], 
                     **default_params
                 )
                 
                 # Apply CTFM processing if requested
                 if apply_ctfm:
+                    print(f"    Applying CTFM processing (Hilbert + dB)...")
                     vol_with_artifacts = self.apply_hilbert_envelope(vol_with_artifacts)
                     vol_with_artifacts = self.convert_to_db(vol_with_artifacts, vmin=-40.0, vmax=0.0)
                 
@@ -848,16 +602,19 @@ class SyntheticVolumeGenerator:
                 # Create new metadata
                 sv_with_artifacts = sv.copy()
                 sv_with_artifacts['volume'] = vol_with_artifacts
-                if use_angular_effects:
-                    sv_with_artifacts['array_position'] = (
-                        origin[1] + shape[1] // 2,
-                        origin[2] + shape[2] // 2
-                    )
                 sub_volumes.append(sv_with_artifacts)
+            
+            print("\n" + "="*60)
+            if apply_ctfm:
+                print("Independent artifacts + CTFM processing applied to all sub-volumes")
+            else:
+                print("Independent artifacts applied to all sub-volumes")
+            print("="*60)
             
             # Save if directory provided
             if save_dir:
                 os.makedirs(save_dir, exist_ok=True)
+                print(f"\nSaving sub-volumes with artifacts to: {save_dir}")
                 
                 for sv in sub_volumes:
                     idx = sv['index']
@@ -878,16 +635,17 @@ class SyntheticVolumeGenerator:
                     'num_subvolumes': len(sub_volumes),
                     'artifact_mode': artifact_mode,
                     'artifact_params': default_params,
-                    'ctfm_applied': apply_ctfm,
-                    'angular_effects': use_angular_effects
+                    'ctfm_applied': apply_ctfm
                 }
                 np.savez(os.path.join(save_dir, 'reconstruction_info.npz'), **recon_info)
+                print(f"Saved {len(sub_volumes)} sub-volumes with metadata")
         
         else:
             raise ValueError(f"Unknown artifact_mode: {artifact_mode}")
         
         # Visualize if requested
         if visualize_subvolumes:
+            print("\nVisualizing sub-volumes...")
             self.visualize_sub_volumes(sub_volumes)
         
         return sub_volumes
@@ -897,6 +655,7 @@ class SyntheticVolumeGenerator:
         """
         Reconstruct original volume using weighted blending - OPTIMIZED.
         """
+        print("\nReconstructing volume from sub-volumes...")
         subvol_shape = sub_volumes[0]['subvol_shape']
         
         if original_shape is None:
@@ -927,10 +686,12 @@ class SyntheticVolumeGenerator:
         
         weights[weights == 0] = 1
         reconstructed /= weights
+        print("Reconstruction complete!")
         return reconstructed
     
     @staticmethod
     def load_sub_volumes(load_dir):
+        print(f"\nLoading sub-volumes from: {load_dir}")
         recon_info = np.load(os.path.join(load_dir, 'reconstruction_info.npz'), allow_pickle=True)
         recon_info = {k: recon_info[k].item() if recon_info[k].ndim == 0 else recon_info[k] 
                       for k in recon_info.files}
@@ -962,14 +723,23 @@ class SyntheticVolumeGenerator:
             return False
 
     def visualize_sub_volumes(self, sub_volumes):
-        """Visualize all sub-volumes in napari with spatial positioning."""
+        """
+        Visualize all sub-volumes in napari with spatial positioning.
+        """
+        print("\nLaunching napari viewer for sub-volumes...")
         viewer = napari.Viewer()
         colormaps = ['viridis', 'plasma', 'inferno', 'magma', 'cividis', 'turbo']
         
         # Detect if CTFM was applied (negative values indicate dB scale)
         sample_vol = sub_volumes[0]['volume']
         is_db_scale = sample_vol.min() < 0
-        contrast_limits = (-40, 0) if is_db_scale else (0.0, 1.0)
+        
+        if is_db_scale:
+            contrast_limits = (-40, 0)
+            print("  Detected dB scale - using contrast limits (-40, 0)")
+        else:
+            contrast_limits = (0.0, 1.0)
+            print("  Detected linear scale - using contrast limits (0, 1)")
         
         for i, sv in enumerate(sub_volumes):
             idx = sv['index']
@@ -983,27 +753,46 @@ class SyntheticVolumeGenerator:
                 opacity=0.6,
                 translate=sv['origin']
             )
+        
+        print("Sub-volumes loaded in viewer. Close window to continue...")
         napari.run()
 
 
 # ============================================================================
-# Example Usage
+# Example Usage - Clean Data
 # ============================================================================
 
+print("="*80)
+print("GENERATING CLEAN VOLUME (OPTIMIZED)")
+print("="*80)
 
-# Generate clean volume
 generator = SyntheticVolumeGenerator(dimensions=(200, 150, 600), seed=42)
 
-# Add defects
+print("\n--- Adding Defects ---")
+print("\n1. Spherical void at shallow depth, left side")
 generator.add_spherical_void(center=(40, 75, 150), radius=10, intensity=0.95)
+
+print("\n2. Cylindrical void extending VERTICALLY")
 generator.add_cylindrical_void(center_pos=100, other_pos=300, radius=6, intensity=0.92, axis='y')
+
+print("\n3. Spherical void at medium depth, right side")
 generator.add_spherical_void(center=(120, 60, 450), radius=8, intensity=0.93)
+
+print("\n4. Cylindrical void extending LATERALLY")
 generator.add_cylindrical_void(center_pos=80, other_pos=100, radius=5, intensity=0.90, axis='x')
 
 volume_clean = generator.generate(base_intensity_range=(0.05, 0.15), smoothing_sigma=2.0)
 generator.save_volume(volume_clean, "synthetic_volume_clean.npy")
 
-# Add artifacts
+
+# ============================================================================
+# Example Usage - With Basic Artifacts (CTFM-based approach)
+# ============================================================================
+
+print("\n" + "="*80)
+print("GENERATING VOLUME WITH BASIC ARTIFACTS (CTFM-BASED)")
+print("="*80)
+
 volume_with_artifacts = generator.add_ultrasonic_artifacts(
     volume_clean,
     electronic_noise_level=0.02,
@@ -1011,22 +800,48 @@ volume_with_artifacts = generator.add_ultrasonic_artifacts(
     depth_attenuation=0.3,
     bloom_radius=0,
     bloom_intensity=0.0,
+    bloom_falloff='gaussian',
     speckle_noise_level=0.04,
-    blur_sigma=(0.3, 4.5, 4.5)
+    blur_sigma=(0.3, 0.8, 4.5)  # Anisotropic PSF: strong lateral blur for horizontal blooming
 )
 generator.save_volume(volume_with_artifacts, "synthetic_volume_with_artifacts.npy")
 
-# Apply CTFM processing
+
+# ============================================================================
+# Post-Processing (CTFM) - This creates the main imaging artifacts
+# ============================================================================
+
+print("\n" + "="*80)
+print("APPLYING CTFM POST-PROCESSING (Hilbert + dB)")
+print("="*80)
+print("Note: The Hilbert envelope creates natural 'bloom' around defects")
+
 volume_envelope = generator.apply_hilbert_envelope(volume_with_artifacts)
 volume_db = generator.convert_to_db(volume_envelope, vmin=-40.0, vmax=0.0)
 generator.save_volume(volume_db, "synthetic_volume_db.npy")
 
+
+# ============================================================================
 # Visualize
+# ============================================================================
+
+print("\n" + "="*80)
+print("VISUALIZING VOLUMES")
+print("="*80)
+
 generator.visualize(volume_clean, name="Clean Volume")
-generator.visualize(volume_with_artifacts, name="With Artifacts")
+generator.visualize(volume_with_artifacts, name="With Basic Artifacts")
 generator.visualize(volume_db, name="CTFM Processed (dB)", contrast_limits=(-40, 0))
 
-# Generate stitching test data
+
+# ============================================================================
+# Generate Stitching Test Data - CTFM-BASED MODE (OPTIMIZED)
+# ============================================================================
+
+print("\n" + "="*80)
+print("GENERATING STITCHING TEST DATA - CTFM-BASED MODE (OPTIMIZED)")
+print("="*80)
+
 sub_volumes_realistic = generator.generate_stitching_test_data(
     volume_clean,
     num_splits=(1, 1, 3),
@@ -1038,20 +853,47 @@ sub_volumes_realistic = generator.generate_stitching_test_data(
         'depth_attenuation': 0.3,
         'bloom_radius': 0,
         'bloom_intensity': 0.0,
+        'bloom_falloff': 'gaussian',
         'speckle_noise_level': 0.04,
-        'blur_sigma': (0.8, 1.0, 3.0)
+        'blur_sigma': (0.3, 0.8, 4.5)  # Anisotropic: strong lateral blur for horizontal blooming
     },
     save_dir="SYNTHETIC NPY/stitching_realistic",
     visualize_subvolumes=True,
-    apply_ctfm=True,
-    use_angular_effects=True
+    apply_ctfm=True  # Apply CTFM processing to each subvolume
 )
 
-# Verify reconstruction
 reconstructed_realistic = SyntheticVolumeGenerator.reconstruct_volume(
     sub_volumes_realistic, 
     volume_clean.shape
 )
+print("\nVerifying reconstruction (realistic mode):")
 generator.verify_reconstruction(volume_clean, reconstructed_realistic)
+
+
+# ==================& PHYSICS SUMMARY")
+print("="*80)
+print("\nPerformance improvements:")
+print("  ✓ Vectorized cylindrical void generation (no loops)")
+print("  ✓ FFT-based convolution for large volumes (10-100x faster)")
+print("  ✓ Float32 processing (2x faster, less memory)")
+print("  ✓ Reduced kernel sizes (faster convolution)")
+print("  ✓ Single-pass noise generation")
+print("\nExpected speedup: 5-20x depending on volume size")
+
+print("\nCTFM-based approach:")
+print("  ✓ No artificial bloom - artifacts from Hilbert + anisotropic PSF")
+print("  ✓ Hilbert transform creates vertical spreading (along depth axis)")
+print("  ✓ Anisotropic PSF creates horizontal spreading (along lateral axis)")
+print("  ✓ Combined effect matches experimental TFM data")
+print("  ✓ More physically accurate to real TFM acquisition")
+print("  ✓ Faster processing (no convolution needed for bloom)")
+print("  ✓ dB conversion compresses dynamic range for visualization")
+
+print("\n" + "="*80)
+print("ALL DONE!")
+print("="*80)
+
+
+## //TODO add randomness to the parameters in each subvolume to simulate inconsistencies between scans (e.g. slight variations in noise levels, bloom intensity, etc.)
 
 
