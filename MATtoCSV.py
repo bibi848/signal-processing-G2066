@@ -13,20 +13,20 @@ import os
 from Classes.Filter import filter_signal
 
 # Point the script to the correct subfolder.
-raw_data_type       = '2D Raw Data'
-raw_data_name       = 'Al Pure 15MHz 12022026'
-processed_data_type = '2D Processed Data'
+raw_data_type       = '1D Raw Data'
+raw_data_name       = 'Cu Pure 15MHz 17022026'
+processed_data_type = '1D Processed Data'
 cwd                 = os.getcwd()
-display_picture     = True
+display_picture     = False
 save_picture        = False
-all_pictures        = True 
+all_pictures        = True
 filter_data         = True
-crop_data           = True
-crop_amount         = 1001
+crop_data           = False
+crop_amount         = 1200
 
 # Filtering Parameters
-filter_alpha = 0.2
-MHz_spacing  = 1.5 # MHz
+filter_alpha = 0.9
+MHz_percentage  = 0.7 # percentage
 hanning_bool = True
 
 # Input and Output paths.
@@ -136,6 +136,7 @@ for file in mat_files:
     })
 
     if filter_data:
+        MHz_spacing = (centre_freq/1e6) * MHz_percentage
         f_start = (centre_freq/1e6) - MHz_spacing
         f_end   = (centre_freq/1e6) + MHz_spacing
         dt      = time[1] - time[0]
