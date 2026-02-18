@@ -18,15 +18,15 @@ from Classes.TFM1D import CTFM1D
 
 # Point the script to the correct subfolder.
 input_data_folder    = '1D Processed Data'
-input_data_subfolder = 'Cu Pure 10MHz 16022026'
+input_data_subfolder = 'Cu Pure 15MHz 17022026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
-display_picture      = False
-save_picture         = True
-all_pictures         = True
-filtered_data        = False
-engine               = 'gpu'    # python/cpp/gpu
-osys                 = 'ubuntu' # windows/ubuntu, choose windows if on mac
+display_picture      = True
+save_picture         = False
+all_pictures         = False
+filtered_data        = True
+engine               = 'cpp'    # python/cpp/gpu
+osys                 = 'windows' # windows/ubuntu, choose windows if on mac
 threads              = 512
 
 if filtered_data:
@@ -35,14 +35,22 @@ else:
     CTFM, db_bool = False, False
 
 vmax    = 0.0
-vmin    = -15.0
+vmin    = -20.0
 
 # Image Parameters
-c        = 6320 # m/s
-depth    = 50e-3 # mm
-x_pixels = 500
+c        = 4530  # m/s
+z_max    = 10e-3 # m
+z_min    = 50e-3 # m
+x_min    = 'xc_min' # m, can specify length
+x_max    = 'xc_max' # or just use xc_min/xc_max
+x_pixels = 300
 z_pixels = 700
 cmap     = 'viridis'
+
+# Aspect Ratio
+real_aspect_ratio = False
+z_aspect = 8
+x_aspect = 6
 
 # Input and Output paths.
 if filtered_data:
@@ -114,8 +122,15 @@ for fol in image_folders:
     xc = geometry["el_xc"].values
     zc = geometry["el_zc"].values
 
-    x_img = np.linspace(xc.min(), xc.max(), x_pixels)
-    z_img = np.linspace(0e-3, depth, z_pixels)
+    if x_max == 'xc_max':
+        x_max = xc.max()
+    if x_min == 'xc_min':
+        x_min = xc.min()
+
+    x_img = np.linspace(x_min, x_max, x_pixels)    
+    z_img = np.linspace(z_max, z_min, z_pixels)
+    if real_aspect_ratio:
+        x_aspect = int(np.ceil(((x_max - x_min) / (z_min - z_max)) * z_aspect))
 
     # TFM computation
     if engine == 'python':
@@ -169,7 +184,7 @@ for fol in image_folders:
 
     # Display picture
     if display_picture:
-        plt.figure(figsize=(6, 8))
+        plt.figure(figsize=(x_aspect, z_aspect))
         if db_bool:
             plt.imshow(
                 img,
@@ -211,3 +226,9 @@ for fol in image_folders:
 full_end = time.time()
 print(f'Time to process {len(image_folders)} images: {full_end - full_start:.6f}s')
 #%%
+# Pixel size
+dx_mm = (x_img[-1] - x_img[0]) * 1e3 / (x_pixels - 1)
+dz_mm = (z_img[-1] - z_img[0]) * 1e3 / (z_pixels - 1)
+
+print(f"Lateral pixel size: {dx_mm:.3f} mm")
+print(f"Depth pixel size:   {dz_mm:.3f} mm")

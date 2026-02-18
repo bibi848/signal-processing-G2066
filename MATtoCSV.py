@@ -17,17 +17,17 @@ raw_data_type       = '1D Raw Data'
 raw_data_name       = 'Cu Pure 15MHz 17022026'
 processed_data_type = '1D Processed Data'
 cwd                 = os.getcwd()
-display_picture     = False
+display_picture     = True
 save_picture        = False
-all_pictures        = True
+all_pictures        = False
 filter_data         = True
 crop_data           = False
 crop_amount         = 1200
 
 # Filtering Parameters
 filter_alpha = 0.9
-MHz_percentage  = 0.7 # percentage
-hanning_bool = True
+MHz_percentage  = 0.1 # percentage
+hanning_bool = False
 
 # Input and Output paths.
 IN_DIR  = os.path.join(cwd, 'DATA', raw_data_type, raw_data_name)
