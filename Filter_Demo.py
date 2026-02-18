@@ -15,14 +15,14 @@ from Classes.Filter import filter_signal
 
 # Point the script to the correct subfolder.
 raw_data_type       = '1D Raw Data'
-raw_data_name       = 'Cu Pure 2.5MHz 17022026'
+raw_data_name       = 'Cu Pure 15MHz 17022026'
 processed_data_type = '1D Processed Data'
 cwd                 = os.getcwd()
-file                = 'Cu_40_1.mat'
+file                = 'Cu_70_1_1.mat'
 
 # Filtering Parameters
 filter_alpha = 0.9
-MHz_percentage  = 0.9 # percentage
+MHz_percentage  = 0.1 # percentage
 hanning_bool = True
 
 # Input and Output paths.
@@ -125,9 +125,10 @@ plt.show()
 #%%
 # Viewing data in frequency-domain
 N        = len(signal)
-window   = np.hanning(N)
-signal_w = signal * window
-fft_vals = np.fft.rfft(signal_w)
+# window   = np.hanning(N)
+# signal_w = signal * window
+# fft_vals = np.fft.rfft(signal_w)
+fft_vals = np.fft.rfft(signal)
 freqs    = np.fft.rfftfreq(N, dt) / 1e6
 magnitude = np.abs(fft_vals)
 
