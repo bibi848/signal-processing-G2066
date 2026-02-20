@@ -991,14 +991,33 @@ class SyntheticVolumeGenerator:
 # ============================================================================
 
 
-# Generate clean volume
-generator = SyntheticVolumeGenerator(dimensions=(200, 150, 600), seed=42)
+# Initialize dimensions (Z=600, Y=200, X=800)
+generator = SyntheticVolumeGenerator(dimensions=(600, 200, 800), seed=42)
 
-# Add defects
-generator.add_spherical_void(center=(40, 75, 150), radius=10, intensity=0.95)
-generator.add_cylindrical_void(center_pos=100, other_pos=300, radius=6, intensity=0.92, axis='y')
-generator.add_spherical_void(center=(120, 60, 450), radius=8, intensity=0.93)
-generator.add_cylindrical_void(center_pos=80, other_pos=100, radius=5, intensity=0.90, axis='x')
+# 12 Hardcoded Cylindrical Voids - SWAPPED (center_pos=Z, other_pos=X)
+# -------------------------------------------------------------------
+
+# Left side of the smile
+generator.add_cylindrical_void(center_pos=250, other_pos=150, radius=12, intensity=0.95, axis='y')
+generator.add_cylindrical_void(center_pos=320, other_pos=200, radius=12, intensity=0.95, axis='y')
+generator.add_cylindrical_void(center_pos=380, other_pos=250, radius=12, intensity=0.95, axis='y')
+
+# Bottom left curve
+generator.add_cylindrical_void(center_pos=430, other_pos=300, radius=12, intensity=0.95, axis='y')
+generator.add_cylindrical_void(center_pos=460, other_pos=350, radius=12, intensity=0.95, axis='y')
+
+# Center bottom
+generator.add_cylindrical_void(center_pos=470, other_pos=400, radius=12, intensity=0.95, axis='y')
+generator.add_cylindrical_void(center_pos=470, other_pos=450, radius=12, intensity=0.95, axis='y')
+
+# Bottom right curve
+generator.add_cylindrical_void(center_pos=460, other_pos=500, radius=12, intensity=0.95, axis='y')
+generator.add_cylindrical_void(center_pos=430, other_pos=550, radius=12, intensity=0.95, axis='y')
+
+# Right side of the smile
+generator.add_cylindrical_void(center_pos=380, other_pos=600, radius=12, intensity=0.95, axis='y')
+generator.add_cylindrical_void(center_pos=320, other_pos=650, radius=12, intensity=0.95, axis='y')
+generator.add_cylindrical_void(center_pos=250, other_pos=700, radius=12, intensity=0.95, axis='y')
 
 volume_clean = generator.generate(base_intensity_range=(0.05, 0.15), smoothing_sigma=2.0)
 generator.save_volume(volume_clean, "synthetic_volume_clean.npy")
@@ -1006,8 +1025,8 @@ generator.save_volume(volume_clean, "synthetic_volume_clean.npy")
 # Add artifacts
 volume_with_artifacts = generator.add_ultrasonic_artifacts(
     volume_clean,
-    electronic_noise_level=0.02,
-    grain_noise_level=0.025,
+    electronic_noise_level=0.1,
+    grain_noise_level=0.25,
     depth_attenuation=0.3,
     bloom_radius=0,
     bloom_intensity=0.0,
@@ -1029,15 +1048,15 @@ generator.visualize(volume_db, name="CTFM Processed (dB)", contrast_limits=(-40,
 # Generate stitching test data
 sub_volumes_realistic = generator.generate_stitching_test_data(
     volume_clean,
-    num_splits=(1, 1, 3),
-    overlap_pixels=(0, 0, 40),
+    num_splits=(1, 1, 7),
+    overlap_pixels=(0, 0, 150),
     artifact_mode='per_subvolume',
     artifact_params={
         'electronic_noise_level': 0.02,
         'grain_noise_level': 0.025,
         'depth_attenuation': 0.3,
-        'bloom_radius': 0,
-        'bloom_intensity': 0.0,
+        'bloom_radius': 2,
+        'bloom_intensity': 0.5,
         'speckle_noise_level': 0.04,
         'blur_sigma': (0.8, 1.0, 3.0)
     },
