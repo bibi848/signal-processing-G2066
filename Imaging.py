@@ -15,37 +15,43 @@ from scipy.signal import hilbert
 
 from Classes.TFM1D import TFM1D
 from Classes.TFM1D import CTFM1D
+from Classes.TFM1D import TFM_angular1D
 
 # Point the script to the correct subfolder.
 input_data_folder    = '1D Processed Data'
-input_data_subfolder = 'Cu Pure 15MHz 17022026'
+input_data_subfolder = 'Al Pure 10MHz 17022026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
-display_picture      = True
-save_picture         = False
-all_pictures         = False
-filtered_data        = True
-engine               = 'cpp'    # python/cpp/gpu
-osys                 = 'windows' # windows/ubuntu, choose windows if on mac
-threads              = 512
 
-if filtered_data:
-    CTFM, db_bool = True, True
-else:
-    CTFM, db_bool = False, False
+display_picture = True
+save_picture    = True
+all_pictures    = False
+filtered_data   = True
+angular_filter  = True
 
-vmax    = 0.0
-vmin    = -20.0
+engine  = 'python' # python/cpp/gpu
+osys    = 'ubuntu' # windows/ubuntu, choose windows if on mac
+threads = 512
+
+# Threshold Parameters
+vmax = 0.0
+vmin = -20.0
+
+# Angular Filter
+half_angle_deg = 30
+min_els        = 40
 
 # Image Parameters
-c        = 4530  # m/s
+c        = 6000  # m/s
 z_max    = 10e-3 # m
-z_min    = 50e-3 # m
+z_min    = 40e-3 # m
 x_min    = 'xc_min' # m, can specify length
 x_max    = 'xc_max' # or just use xc_min/xc_max
-x_pixels = 300
-z_pixels = 700
-cmap     = 'viridis'
+x_min    = -15e-3 # m, can specify length
+x_max    = 15e-3 # or just use xc_min/xc_max
+x_pixels = 400
+z_pixels = 400
+cmap     = 'grey'
 
 # Aspect Ratio
 real_aspect_ratio = False
@@ -53,10 +59,14 @@ z_aspect = 8
 x_aspect = 6
 
 # Input and Output paths.
-if filtered_data:
+if filtered_data and not angular_filter:
     IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, (input_data_subfolder+' Filtered'))
     OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, (input_data_subfolder+' Filtered'))
     os.makedirs(OUT_DIR, exist_ok=True)
+elif filtered_data and angular_filter:
+    IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, (input_data_subfolder+' Filtered'))
+    OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, (input_data_subfolder+' Angular'))
+    os.makedirs(OUT_DIR, exist_ok=True)  
 else:
     IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, input_data_subfolder)
     OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, input_data_subfolder)
@@ -67,7 +77,7 @@ image_folders = [
     f for f in os.listdir(IN_DIR)
     if os.path.isdir(os.path.join(IN_DIR, f))
 ]
-
+image_folders = np.sort(image_folders)
 print('Files available in directory:')
 print(image_folders)
 print()
@@ -98,6 +108,12 @@ elif engine == 'gpu':
     print('GPU Available')
     print()
 
+if filtered_data and not angular_filter:
+    CTFM, ATFM, db_bool = True, False, True
+elif filtered_data and angular_filter:
+    CTFM, ATFM, db_bool = False, True, True
+else:
+    CTFM, ATFM, db_bool = False, False, False
 
 #%%
 # Looping over available files
@@ -138,6 +154,9 @@ for fol in image_folders:
 
         if CTFM:
             img = CTFM1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img, output_db=db_bool)
+        elif ATFM:
+            img = TFM_angular1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img, 
+                              half_angle_deg, min_els, output_db=db_bool)
         else:
             img = TFM1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img)
 
