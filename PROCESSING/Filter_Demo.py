@@ -5,25 +5,32 @@ This script shows how the filtering is being done on the data.
 #%%
 # Importing Functions and Defining Correct Path
 import matplotlib.pyplot as plt
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import h5py
+import sys
 import os
-from scipy.signal.windows import tukey
+plt.rcParams['font.size'] = 13
 
+root_path = Path(__file__).resolve().parent.parent
+if str(root_path) not in sys.path:
+    sys.path.append(str(root_path))
+
+from scipy.signal.windows import tukey
 from Classes.Filter import filter_signal
 
 # Point the script to the correct subfolder.
 raw_data_type       = '1D Raw Data'
-raw_data_name       = 'Cu Pure 15MHz 17022026'
+raw_data_name       = 'Al Pure 10MHz 17022026'
 processed_data_type = '1D Processed Data'
-cwd                 = os.getcwd()
-file                = 'Cu_70_1_1.mat'
+cwd                 = Path.cwd().parent
+file                = 'Al_70_1_1.mat'
 
 # Filtering Parameters
 filter_alpha = 0.9
-MHz_percentage  = 0.1 # percentage
-hanning_bool = True
+MHz_percentage  = 0.3 # percentage
+hanning_bool = False
 
 # Input and Output paths.
 IN_DIR  = os.path.join(cwd, 'DATA', raw_data_type, raw_data_name)
@@ -142,6 +149,38 @@ plt.tight_layout()
 plt.show()
 
 #%%
+# Time and Frequency Domains next to each other
+signal = signal - np.mean(signal)
+dt = time[1] - time[0]
+
+# FFT
+N = len(signal)
+fft_vals = np.fft.rfft(signal)
+freqs = np.fft.rfftfreq(N, dt) / 1e6
+magnitude = np.abs(fft_vals)
+
+# Plot time and frequency domain side-by-side
+fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+
+# Time-domain
+ax[0].plot(time, signal, c='b')
+ax[0].set_xlabel("Time [s]")
+ax[0].set_ylabel("Amplitude")
+ax[0].set_title("Time Domain")
+ax[0].grid(True)
+
+# Frequency-domain
+ax[1].plot(freqs, magnitude, c='r')
+ax[1].set_xlabel("Frequency [MHz]")
+ax[1].set_ylabel("Magnitude")
+ax[1].set_title("Frequency Domain")
+ax[1].grid(True)
+
+plt.tight_layout()
+plt.savefig("Images/time_frequency_signal.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+#%%
 # Filtering
 MHz_spacing = (centre_freq/1e6) * MHz_percentage
 f_start = (centre_freq/1e6) - MHz_spacing
@@ -198,3 +237,32 @@ plt.tight_layout()
 plt.show()
 
 #%%
+# FFT of filtered signal
+fft_filtered = np.fft.rfft(filtered_signal)
+magnitude_filtered = np.abs(fft_filtered)
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+
+# Time-domain overlay
+ax[0].plot(time, signal, label="Original", alpha=0.7, color='gray')
+ax[0].plot(time, filtered_signal, label="Filtered", color='blue')
+ax[0].set_xlabel("Time [s]")
+ax[0].set_ylabel("Amplitude")
+ax[0].set_title("Time Domain")
+ax[0].grid(True)
+ax[0].legend(loc='upper right')
+
+# Frequency-domain overlay
+ax[1].plot(freqs, magnitude / np.max(magnitude), c='r', label="Original")
+ax[1].plot(freqs, bp_filter, label="Filter", linestyle='--', c='g')
+ax[1].fill_between(freqs, bp_filter, alpha=0.2, color='g')
+ax[1].set_xlabel("Frequency [MHz]")
+ax[1].set_ylabel("Magnitude")
+ax[1].set_title("Frequency Domain")
+ax[1].grid(True)
+ax[1].legend(loc='upper right')
+
+plt.tight_layout()
+plt.savefig("Images/filtered_time_frequency_signal.png", dpi=300, bbox_inches="tight")
+plt.show()
+# %%
