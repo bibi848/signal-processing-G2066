@@ -1,0 +1,7 @@
+1D 64 els 5MHz 0.63mm pitch
+FMC
+Sample freq: 25 MHz
+Time Points: 1000
+Sample bits: 8
+Gain: 40dB
+Averages: 64
