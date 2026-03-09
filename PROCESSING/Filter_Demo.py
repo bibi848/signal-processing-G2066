@@ -4,6 +4,7 @@ This script shows how the filtering is being done on the data.
 
 #%%
 # Importing Functions and Defining Correct Path
+from scipy.signal import hilbert
 import matplotlib.pyplot as plt
 from pathlib import Path
 import pandas as pd
@@ -159,7 +160,7 @@ fft_vals = np.fft.rfft(signal)
 freqs = np.fft.rfftfreq(N, dt) / 1e6
 magnitude = np.abs(fft_vals)
 
-# Plot time and frequency domain side-by-side
+# Plot time and frequency domain
 fig, ax = plt.subplots(1, 2, figsize=(12, 5))
 
 # Time-domain
@@ -266,3 +267,24 @@ plt.tight_layout()
 plt.savefig("Images/filtered_time_frequency_signal.png", dpi=300, bbox_inches="tight")
 plt.show()
 # %%
+
+#%%
+# Hilbert Transform
+plt.rcParams['font.size'] = 16
+analytic_signal = hilbert(filtered_signal)
+envelope = np.abs(analytic_signal)
+crop = 300
+plt.figure(figsize=(10,6))
+plt.plot(time[:crop], filtered_signal[:crop], label="Filtered Signal", color="blue", alpha=0.9)
+plt.plot(time[:crop], envelope[:crop], label="Hilbert Envelope", color="red", linewidth=2)
+
+plt.xlabel("Time [s]")
+plt.ylabel("Amplitude")
+plt.legend(loc='upper right')
+plt.grid(True)
+plt.tight_layout()
+
+plt.savefig("Images/hilbert_envelope_signal.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+#%%
