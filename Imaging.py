@@ -19,17 +19,17 @@ from Classes.TFM1D import TFM_angular1D
 
 # Point the script to the correct subfolder.
 input_data_folder    = '1D Processed Data'
-input_data_subfolder = 'Al Pure 10MHz 17022026'
+input_data_subfolder = 'Al Pure 10MHz Ex 09032026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
 
-display_picture = True
+display_picture = False
 save_picture    = True
-all_pictures    = False
+all_pictures    = True
 filtered_data   = True
-angular_filter  = True
+angular_filter  = False
 
-engine  = 'python' # python/cpp/gpu
+engine  = 'gpu' # python/cpp/gpu
 osys    = 'ubuntu' # windows/ubuntu, choose windows if on mac
 threads = 512
 
@@ -42,21 +42,19 @@ half_angle_deg = 30
 min_els        = 40
 
 # Image Parameters
-c        = 6000  # m/s
+c        = 6126.44  # m/s
 z_max    = 10e-3 # m
 z_min    = 40e-3 # m
 x_min    = 'xc_min' # m, can specify length
 x_max    = 'xc_max' # or just use xc_min/xc_max
-x_min    = -15e-3 # m, can specify length
-x_max    = 15e-3 # or just use xc_min/xc_max
-x_pixels = 400
-z_pixels = 400
+x_pixels = 800
+z_pixels = 800
 cmap     = 'grey'
 
 # Aspect Ratio
 real_aspect_ratio = False
 z_aspect = 8
-x_aspect = 6
+x_aspect = 8
 
 # Input and Output paths.
 if filtered_data and not angular_filter:
