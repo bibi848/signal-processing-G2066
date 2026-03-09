@@ -1,0 +1,7 @@
+1D 128els 10MHz 0.3mm pitch
+FMC
+Sample Freq: 50MHz
+Time Points: 2000
+Sample Bits: 8
+Gain: 70dB
+Averages: 64
