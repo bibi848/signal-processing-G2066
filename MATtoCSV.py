@@ -1,7 +1,6 @@
 '''
 This script converts the .mat files collected from using the ultrasonic scanning array to .csv files. 
 '''
-
 #%%
 # Importing Functions and Defining Correct Path
 import matplotlib.pyplot as plt
@@ -14,19 +13,19 @@ from Classes.Filter import filter_signal
 
 # Point the script to the correct subfolder.
 raw_data_type       = '1D Raw Data'
-raw_data_name       = 'Cu Pure 15MHz 17022026'
+raw_data_name       = 'Al Pure 10MHz Ex 09032026'
 processed_data_type = '1D Processed Data'
 cwd                 = os.getcwd()
-display_picture     = True
+display_picture     = False
 save_picture        = False
-all_pictures        = False
+all_pictures        = True
 filter_data         = True
-crop_data           = False
+crop_data           = True
 crop_amount         = 1200
 
 # Filtering Parameters
 filter_alpha = 0.9
-MHz_percentage  = 0.1 # percentage
+MHz_percentage  = 0.45 # percentage
 hanning_bool = False
 
 # Input and Output paths.

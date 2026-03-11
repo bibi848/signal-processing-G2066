@@ -1,0 +1,36 @@
+3D Printed Rig used for semi-accurate measurements of copper block. 
+Copper block has drilled holes which will be used for calibration. 
+Speed of Sound Array is 1D 64els 5MHz.
+Measuring Array is 2D 128els 7.5MHz.
+
+Speed of Sound Measurements:
+Imasonic 1D 64els 5.00MHz 0.63mm pitch
+FMC
+Sample Frequency: 25MHz
+Time points: 1500
+Gain: 40dB
+Averages: 1
+
+Calibration:
+2D random (box says sparse) 128 els 7.5MHz 0.77mm pitch
+FMC
+Sample Frequency: 50MHz
+Time points: 2500
+Gain: 40dB
+Averages: 20
+
+Measuring Group A and B (array rotated 90 deg between tests A and B):
+2D random (box says sparse) 128 els 7.5MHz 0.77mm pitch
+FMC
+Sample Frequency: 50MHz
+Time points: 2000
+Gain: 70dB
+Averages: 64
+
+Measuring Group C and D (array rotated 90 deg between tests C and D):
+2D random (box says sparse) 128 els 7.5MHz 0.77mm pitch
+FMC
+Sample Frequency: 50MHz
+Time points: 1200
+Gain: 70dB
+Averages: 64
