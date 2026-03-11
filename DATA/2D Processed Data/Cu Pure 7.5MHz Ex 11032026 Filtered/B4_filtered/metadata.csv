@@ -1,0 +1,7 @@
+Field,Value
+origin,B4.mat
+centre_frequency_Hz,7500000.0
+manufacturer,UNKNOWN
+number_of_elements,128
+number_of_fmc_traces,16384
+number_of_time_samples,2000
