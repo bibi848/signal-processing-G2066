@@ -1,5 +1,32 @@
 import os
 import sys
+
+# Configure Qt for macOS before importing napari
+if sys.platform == 'darwin':  # macOS
+    import sysconfig
+    try:
+        import site
+        site_packages = site.getsitepackages()[0] if site.getsitepackages() else None
+        if site_packages:
+            qt_plugin_path = os.path.join(site_packages, 'PyQt5', 'Qt5', 'plugins')
+            if os.path.exists(qt_plugin_path):
+                os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = qt_plugin_path
+    except:
+        pass
+    if 'QT_QPA_PLATFORM_PLUGIN_PATH' not in os.environ:
+        lib_path = sysconfig.get_path('purelib')
+        if lib_path:
+            qt_plugin_path = os.path.join(lib_path, 'PyQt5', 'Qt5', 'plugins')
+            if os.path.exists(qt_plugin_path):
+                os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = qt_plugin_path
+    if 'QT_QPA_PLATFORM_PLUGIN_PATH' not in os.environ:
+        base_path = os.path.join(sys.prefix, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages')
+        qt_plugin_path = os.path.join(base_path, 'PyQt5', 'Qt5', 'plugins')
+        if os.path.exists(qt_plugin_path):
+            os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = qt_plugin_path
+    os.environ['QT_QPA_PLATFORM'] = 'cocoa'
+    os.environ['QT_LOGGING_RULES'] = '*.debug=false;qt.qpa.*=false'
+
 import numpy as np
 import napari
 

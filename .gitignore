@@ -7,3 +7,4 @@ threads_optim.py
 test.py
 __pycache__
 *.npz
+*.sh

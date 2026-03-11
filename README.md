@@ -81,15 +81,59 @@ When your work is ready:
 
 ---
 
-### 6. Creating a virtual environment
+### 6. Using the virtual environment
 
-When you have downloaded the correct python version, ensure that it is selected in the terminal and then run:
+**Quick Start:**
 
-    python -m venv .venv
+The virtual environment (.venv) is already set up with all dependencies installed. To use it:
 
-And then download all libraries using:
+**Option 1: Using the activation script (Recommended for macOS):**
 
-    pip install -r requirements.txt
+    source activate.sh
+
+This activates the virtual environment and configures Qt for napari on macOS.
+
+**Option 2: Direct activation:**
+
+    source .venv/bin/activate  # macOS/Linux
+    .venv\Scripts\activate     # Windows
+
+**Option 3: Run scripts directly (no activation needed):**
+
+    .venv/bin/python "SYNTHETIC DATA/3d synthetic data v2.py"
+
+---
+
+**Setting up from scratch (if .venv doesn't exist):**
+
+If you need to recreate the virtual environment:
+
+1. Create the virtual environment:
+   ```bash
+   python3 -m venv .venv
+   ```
+
+2. Activate it:
+   ```bash
+   source .venv/bin/activate  # macOS/Linux
+   .venv\Scripts\activate     # Windows
+   ```
+
+3. Upgrade pip:
+   ```bash
+   pip install --upgrade pip
+   ```
+
+4. Install all dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+**Important for macOS users using napari:**
+
+The project's Python scripts automatically configure Qt for macOS, so napari will work correctly when you run them directly. The `activate.sh` script provides the cleanest environment setup.
+
+**Note:** PyQt5 is required for napari and is included in `requirements.txt`.
 
 --- 
 
