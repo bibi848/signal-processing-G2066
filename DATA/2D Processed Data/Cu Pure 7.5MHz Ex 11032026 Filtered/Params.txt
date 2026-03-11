@@ -1,0 +1,4 @@
+Cropped to 1200
+filter_alpha = 0.9
+MHz_percentage = 0.45
+hanning_bool = False

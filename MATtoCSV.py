@@ -11,12 +11,22 @@ import os
 
 from Classes.Filter import filter_signal
 
+def remove_spikes(signal, threshold=500, verbose=False):
+    signal = signal.copy()
+    for i in range(1, len(signal)):
+        if signal[i] > threshold:
+            signal[i] = signal[i-1]
+            if verbose:
+                print('Signal exceeds threshold')
+    return signal
+
+
 # Point the script to the correct subfolder.
-raw_data_type       = '1D Raw Data'
-raw_data_name       = 'Al Pure 10MHz Ex 09032026'
-processed_data_type = '1D Processed Data'
+raw_data_type       = '2D Raw Data'
+raw_data_name       = 'Cu Pure 7.5MHz Ex 11032026'
+processed_data_type = '2D Processed Data'
 cwd                 = os.getcwd()
-display_picture     = False
+display_picture     = True
 save_picture        = False
 all_pictures        = True
 filter_data         = True
@@ -42,6 +52,7 @@ mat_files = [
     if f.lower().endswith(".mat")
     and os.path.isfile(os.path.join(IN_DIR, f))
 ]
+mat_files = np.sort(mat_files)
 
 print('Files available in directory:')
 print(mat_files)
@@ -110,6 +121,15 @@ for file in mat_files:
         time_data = time_data[:, :crop_amount]
         time      = time[:crop_amount]
 
+    # Removing Extreme Spikes
+    time_data = np.apply_along_axis(remove_spikes, 
+                                    axis=1,
+                                    arr=time_data,
+                                    threshold=500,
+                                    verbose=True)
+
+    
+    # New Arrays
     # Time
     time_df = pd.DataFrame({
         "time_seconds": time
