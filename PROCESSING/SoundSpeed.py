@@ -7,6 +7,13 @@ import numpy as np
 import h5py
 import os
 from scipy.signal.windows import tukey
+import sys
+
+root_path = Path(__file__).resolve().parent.parent
+if str(root_path) not in sys.path:
+    sys.path.append(str(root_path))
+
+from Classes.CalcSpeedOfSound import calcSpeedOfSound
 
 # Point the script to the correct subfolder.
 in_data_type = '1D Processed Data'
@@ -100,5 +107,10 @@ plt.scatter(max_time2, max_val2, c='r')
 plt.xlim(3.2e-5, 3.6e-5)
 plt.show()
 
+#%%
+# Function Test
+
+sound_speed = calcSpeedOfSound(time_np, time_data, t_threshold, threshold_shift,
+                               depth, displayBool=True, elements=[0,1,2])
 
 #%%
