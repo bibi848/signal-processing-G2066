@@ -14,7 +14,7 @@ from scipy.signal import hilbert
 
 # Point the script to the correct subfolder.
 input_data_folder    = '2D Processed Data'
-input_data_subfolder = 'Al Pure 15MHz 12022026'
+input_data_subfolder = 'Cu Pure 7.5MHz Ex 11032026'
 output_data_folder   = '2D TFM Data'
 cwd                  = os.getcwd()
 save_picture         = True
@@ -28,12 +28,17 @@ if filtered_data:
 else:
     CTFM, db_bool = False, False
 
-vmax    = 0.0
-vmin    = -25.0
+vmax = 0.0
+vmin = -20.0
 
-# Parameters
-c        = 6320 # m/s
-depth    = 50e-3 # mm
+# Image Parameters
+c        = 4703.28 # m/s
+z_max    = 5e-3  # m
+z_min    = 40e-3 # m
+x_min    = 'xc_min' # m, can specify length
+x_max    = 'xc_max' # or just use xc_min/xc_max
+y_min    = 'yc_min'
+y_max    = 'yc_max'
 x_pixels = 200
 y_pixels = 200
 z_pixels = 400
@@ -53,6 +58,8 @@ image_folders = [
     f for f in os.listdir(IN_DIR)
     if os.path.isdir(os.path.join(IN_DIR, f))
 ]
+image_folders = [x for x in image_folders if "Speed of Sound" not in x]
+image_folders = np.sort(image_folders)
 
 print('Files available in directory:')
 print(image_folders)
@@ -102,10 +109,20 @@ for fol in image_folders:
     yc = geometry["el_yc"].values
     zc = geometry["el_zc"].values
 
+    if x_max == 'xc_max':
+        x_max = xc.max()
+    if x_min == 'xc_min':
+        x_min = xc.min()
+
+    if y_max == 'yc_max':
+        y_max = yc.max()
+    if y_min == 'yc_min':
+        y_min = yc.min()
+
     # Image grid
-    x_img = np.linspace(xc.min(), xc.max(), x_pixels)
-    y_img = np.linspace(yc.min(), yc.max(), y_pixels)
-    z_img = np.linspace(0e-3, depth, z_pixels)
+    x_img = np.linspace(x_min, x_max, x_pixels)
+    y_img = np.linspace(y_min, y_max, y_pixels)
+    z_img = np.linspace(z_max, z_min, z_pixels)
     tx0 = tx - 1
     rx0 = rx - 1
 
@@ -162,3 +179,13 @@ for fol in image_folders:
 
 full_end = time.time()
 print(f'Time to process {len(image_folders)} images: {full_end - full_start:.6f}s')
+
+#%%
+# Pixel size
+dx_mm = (x_img[-1] - x_img[0]) * 1e3 / (x_pixels - 1)
+dy_mm = (y_img[-1] - y_img[0]) * 1e3 / (y_pixels - 1)
+dz_mm = (z_img[-1] - z_img[0]) * 1e3 / (z_pixels - 1)
+
+print(f"X-dir pixel size: {dx_mm:.3f} mm")
+print(f"Y-dir pixel size: {dy_mm:.3f} mm")
+print(f"Z-dir pixel size: {dz_mm:.3f} mm")
