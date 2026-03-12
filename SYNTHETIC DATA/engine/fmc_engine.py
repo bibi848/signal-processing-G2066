@@ -61,9 +61,33 @@ class FMCEngine:
         )
         self.defects: List[Defect2D] = []
 
+        # Voxel Born scatterers set via set_born_scatterers()
+        self._born_z:   Optional[np.ndarray] = None   # (N_s,) scatterer depths
+        self._born_x:   Optional[np.ndarray] = None   # (N_s,) scatterer laterals
+        self._born_amp: Optional[np.ndarray] = None   # (N_s,) Born amplitudes
+
     def add_defect(self, defect: Defect2D):
-        """Register a defect in the simulation."""
+        """Register a geometric defect in the simulation."""
         self.defects.append(defect)
+
+    def set_born_scatterers(self,
+                             z_s: np.ndarray,
+                             x_s: np.ndarray,
+                             amp_s: np.ndarray) -> None:
+        """
+        Register Born-approximation scatterers derived from a voxel volume.
+
+        These represent grain boundaries or other weak impedance contrasts.
+        They are added on top of any geometric defects.
+
+        Args:
+            z_s:   (N_s,) depth coordinates (m)
+            x_s:   (N_s,) lateral coordinates in the scan plane (m)
+            amp_s: (N_s,) Born amplitudes = δZ / (2·Z₀)
+        """
+        self._born_z   = np.asarray(z_s,   dtype=np.float64)
+        self._born_x   = np.asarray(x_s,   dtype=np.float64)
+        self._born_amp = np.asarray(amp_s, dtype=np.float64)
 
     def simulate(self) -> dict:
         """
@@ -84,8 +108,9 @@ class FMCEngine:
 
         fmc_data = np.zeros((num_el, num_el, n_t), dtype=np.float32)
 
+        n_born = len(self._born_z) if self._born_z is not None else 0
         print(cfg.summary())
-        print(f"  Defects: {len(self.defects)}")
+        print(f"  Defects: {len(self.defects)}  |  Born scatterers: {n_born}")
         print(f"  Simulating FMC acquisition...")
 
         t_start = time_module.time()
@@ -111,6 +136,10 @@ class FMCEngine:
         # --- Skip paths and corner trap ---
         if self.defects and cfg.max_bounces >= 2:
             self._add_skip_and_corner_trap(fmc_data, elem_x, time_axis)
+
+        # --- Born scattering from voxel volume (grain noise / voxel defects) ---
+        if self._born_z is not None and len(self._born_z) > 0:
+            self._compute_born_scattering(fmc_data, elem_x, time_axis)
 
         elapsed = time_module.time() - t_start
         print(f"  FMC simulation complete: {elapsed:.1f}s")
@@ -539,6 +568,92 @@ class FMCEngine:
                         freq, bw
                     )
                     fmc_data[tx_idx, rx_idx, :] += a_scan
+
+    # ------------------------------------------------------------------
+    # Born scattering from voxel volume
+    # ------------------------------------------------------------------
+
+    def _compute_born_scattering(self,
+                                  fmc_data: np.ndarray,
+                                  elem_x: np.ndarray,
+                                  time_axis: np.ndarray) -> None:
+        """
+        Add Born-approximation scattering from voxel-derived scatterers.
+
+        Algorithm — impulse-train convolution:
+        1. For every (tx, rx, scatterer) triple, compute the arrival sample
+           index tof_samp = round(tof / dt) and weighted amplitude.
+        2. Scatter-add amplitudes into a (n_pairs, n_t) impulse-train matrix
+           using np.add.at — one column spike per arrival.
+        3. Batch-convolve all n_pairs impulse trains with the Gabor wavelet
+           kernel using scipy.ndimage.convolve1d (single vectorised call).
+
+        Complexity: O(n_el² × n_s)  scatter  +  O(n_el² × n_t × n_kernel) conv
+        For 64 elements, 6000 scatterers, 2048 samples, ~60-sample kernel:
+          ~25 M  (scatter)  +  ~500 M (conv with FFT opt.) ≈ 1–3 s total.
+        This is ~100× faster than the per-pair synthesize_ascan_vectorized loop.
+
+        Args:
+            fmc_data:  (num_el, num_el, n_t) FMC array, updated in-place
+            elem_x:    (num_el,) element x-positions
+            time_axis: (n_t,) time axis
+        """
+        from scipy.ndimage import convolve1d
+
+        assert self._born_z is not None
+        cfg  = self.cfg
+        assert cfg.material is not None
+        c_L  = cfg.material.c_L
+        freq = cfg.array.frequency
+        bw   = cfg.array.bandwidth
+        sigma = 1.0 / (np.pi * freq * bw)
+
+        n_el = len(elem_x)
+        n_t  = len(time_axis)
+        n_s  = len(self._born_z)
+        dt   = float(time_axis[1] - time_axis[0])
+
+        # Build Gabor kernel centred at τ = 0
+        n_half  = int(np.ceil(5.0 * sigma / dt))
+        tau     = np.arange(-n_half, n_half + 1) * dt
+        gabor_k = (np.exp(-0.5 * (tau / sigma) ** 2)
+                   * np.cos(2.0 * np.pi * freq * tau)).astype(np.float32)
+
+        # Distances: (n_el, n_s)
+        dz = self._born_z[np.newaxis, :]
+        dx = self._born_x[np.newaxis, :] - elem_x[:, np.newaxis]
+        r  = np.sqrt(dz ** 2 + dx ** 2)
+
+        # TOF and amplitude: (n_el, n_el, n_s)
+        r_tx   = r[:, np.newaxis, :]
+        r_rx   = r[np.newaxis, :, :]
+        tof    = (r_tx + r_rx) / c_L
+        spread = 1.0 / np.sqrt(np.maximum(r_tx * r_rx, 1e-20))
+        amp    = (self._born_amp[np.newaxis, np.newaxis, :] * spread).astype(np.float32)
+
+        # Sample indices: (n_el, n_el, n_s)
+        tof_samp = np.round(tof / dt).astype(np.int32)
+        valid    = (tof_samp >= 0) & (tof_samp < n_t)
+
+        # Build impulse trains: (n_pairs, n_t)
+        n_pairs  = n_el * n_el
+        f_flat   = np.zeros((n_pairs, n_t), dtype=np.float32)
+
+        pair_idx = np.broadcast_to(
+            np.arange(n_pairs, dtype=np.int32).reshape(n_el, n_el, 1),
+            (n_el, n_el, n_s),
+        ).ravel()
+        t_idx = tof_samp.clip(0, n_t - 1).ravel()
+        a_val = amp.ravel()
+        v     = valid.ravel()
+
+        np.add.at(f_flat, (pair_idx[v], t_idx[v]), a_val[v])
+
+        # Batch convolve all impulse trains with the Gabor kernel
+        result = convolve1d(f_flat, gabor_k, axis=1,
+                            mode='constant', cval=0.0)
+
+        fmc_data += result.reshape(n_el, n_el, n_t)
 
     # ------------------------------------------------------------------
     # Back-wall reverberations

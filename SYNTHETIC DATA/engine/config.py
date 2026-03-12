@@ -3,7 +3,7 @@ Configuration dataclasses for the NDT simulation engine.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import Optional
 import numpy as np
 
 
@@ -117,7 +117,7 @@ class AcquisitionConfig:
         add_noise: Whether to add noise to FMC data
     """
     time_samples: int = 2048
-    sampling_frequency: float = None  # Set from array frequency if None
+    sampling_frequency: Optional[float] = None  # Set from array frequency if None
     snr_db: float = 35.0
     grain_noise_level: float = 0.05
     add_noise: bool = True
@@ -138,10 +138,42 @@ class ReconstructionConfig:
     """
     pixel_size: float = 0.1e-3
     z_start: float = 0.0
-    z_end: float = None
-    x_start: float = None
-    x_end: float = None
+    z_end: Optional[float] = None
+    x_start: Optional[float] = None
+    x_end: Optional[float] = None
     db_range: float = -40.0
+
+
+@dataclass
+class ScanPlanConfig:
+    """
+    Mechanical scan plan for 3D volume acquisition.
+
+    The 1D array rotates around the centre of the array (origin of the front
+    surface) to acquire a stack of 2D B-scans at different azimuthal angles.
+    Each scan plane contains the z-axis (depth) and the array direction
+    (cos θ, sin θ, 0) in the x-y plane.
+
+    Attributes:
+        n_scans:      Number of angular frames to acquire
+        theta_start:  First angle (rad).  Default −π/2  (array along −y)
+        theta_end:    Last  angle (rad).  Default +π/2  (array along +y)
+    """
+    n_scans:     int   = 32
+    theta_start: float = -np.pi / 2   # rad
+    theta_end:   float =  np.pi / 2   # rad
+
+    @property
+    def angles(self) -> 'np.ndarray':
+        """Rotation angles (rad) for each frame."""
+        return np.linspace(self.theta_start, self.theta_end, self.n_scans)
+
+    @property
+    def angle_step(self) -> float:
+        """Angular step between frames (rad)."""
+        if self.n_scans < 2:
+            return 0.0
+        return float((self.theta_end - self.theta_start) / (self.n_scans - 1))
 
 
 @dataclass
@@ -149,12 +181,13 @@ class SimulationConfig:
     """
     Top-level configuration bundling all simulation parameters.
     """
-    material: MaterialProperties = None
-    couplant: MaterialProperties = None
+    material: Optional[MaterialProperties] = None
+    couplant: Optional[MaterialProperties] = None
     array: ArrayConfig = field(default_factory=ArrayConfig)
     specimen: SpecimenConfig = field(default_factory=SpecimenConfig)
     acquisition: AcquisitionConfig = field(default_factory=AcquisitionConfig)
     reconstruction: ReconstructionConfig = field(default_factory=ReconstructionConfig)
+    scan_plan: Optional[ScanPlanConfig] = None   # None = single 2D scan
     max_bounces: int = 3
     mode_conversion: bool = True
     gel_thickness: float = 0.075e-3  # Gel layer thickness (m). ~0.05-0.1 mm typical.
@@ -182,6 +215,7 @@ class SimulationConfig:
     @property
     def dt(self) -> float:
         """Time step (s)."""
+        assert self.acquisition.sampling_frequency is not None
         return 1.0 / self.acquisition.sampling_frequency
 
     @property
@@ -191,6 +225,9 @@ class SimulationConfig:
 
     def summary(self) -> str:
         """Print a human-readable summary of the configuration."""
+        assert self.material is not None
+        assert self.couplant is not None
+        assert self.acquisition.sampling_frequency is not None
         lines = [
             f"{'='*70}",
             f"NDT SIMULATION CONFIGURATION",
@@ -211,6 +248,13 @@ class SimulationConfig:
             f"  Max depth: {self.material.c_L * self.time_axis[-1] / 2 * 1e3:.1f} mm",
             f"  Max bounces: {self.max_bounces}, "
             f"Mode conversion: {self.mode_conversion}",
-            f"{'='*70}",
         ]
+        if self.scan_plan is not None:
+            sp = self.scan_plan
+            lines.append(
+                f"  3D scan: {sp.n_scans} frames, "
+                f"θ=[{np.degrees(sp.theta_start):.1f}°, {np.degrees(sp.theta_end):.1f}°], "
+                f"step={np.degrees(sp.angle_step):.2f}°"
+            )
+        lines.append(f"{'='*70}")
         return "\n".join(lines)
