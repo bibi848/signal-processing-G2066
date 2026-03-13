@@ -9,12 +9,13 @@ python Display3DData.py
 In your terminal (one by one) worked for me. 
 Linux: export QT_QPA_PLATFORM=xcb
 '''
-
-# Configure Qt for macOS before importing napari
 import os
 import sys
+import numpy as np
+import napari
 
-if sys.platform == 'darwin':  # macOS
+# Configuring Napari for MacOS
+if sys.platform == 'darwin':
     import sysconfig
     try:
         import site
@@ -39,9 +40,6 @@ if sys.platform == 'darwin':  # macOS
     os.environ['QT_QPA_PLATFORM'] = 'cocoa'
     os.environ['QT_LOGGING_RULES'] = '*.debug=false;qt.qpa.*=false'
 
-import numpy as np
-import napari
-
 # Point the script to the correct subfolder.
 input_data_folder    = '2D TFM Data'
 input_data_subfolder = 'Cu Pure 7.5MHz Ex 11032026 Filtered'
@@ -59,7 +57,7 @@ print('Files available in directory:')
 print(npy_files)
 print()
 
-img = np.load(os.path.join(IN_DIR, "Calibration 2_filtered_3D_TFM.npy"))
+img = np.load(os.path.join(IN_DIR, "A1_filtered_3D_TFM.npy"))
 
 viewer = napari.Viewer()
 viewer.add_image(
