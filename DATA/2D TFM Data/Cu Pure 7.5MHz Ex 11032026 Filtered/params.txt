@@ -1,0 +1,15 @@
+# Image Parameters
+c        = 4703.28 # m/s
+z_max    = 10e-3  # m
+z_min    = 40e-3 # m
+x_min    = 'xc_min' # m
+x_max    = 'xc_max' # m
+y_min    = 'yc_min' # m
+y_max    = 'yc_max' # m
+x_pixels = 200
+y_pixels = 200
+z_pixels = 400
+
+X-dir pixel size: 0.059 mm
+Y-dir pixel size: 0.059 mm
+Z-dir pixel size: 0.075 mm
