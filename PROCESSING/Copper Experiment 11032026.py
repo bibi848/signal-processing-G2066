@@ -17,12 +17,15 @@ root_path = Path(__file__).resolve().parent.parent
 if str(root_path) not in sys.path:
     sys.path.append(str(root_path))
 
+import matplotlib.pyplot as plt
+import pandas as pd
 import numpy as np
 import napari
-import pandas as pd
 import h5py
 
 from Classes.CalcSpeedOfSound import calcSpeedOfSound
+from Classes.Stitch3D import normalised_correlation_3D
+from Classes.Stitch3D import stitch_volumes
 
 #%%
 # Self described functions
@@ -60,7 +63,6 @@ groups = [data_folders[i:i+5] for i in range(0, len(data_folders), 5)]
 
 #%%
 # Speed of Sound Calculations
-
 block_depth = 50e-3
 t_threshold = 1e-5
 threshold_shift = 2e-5
@@ -90,6 +92,15 @@ for folder in speed_of_sound_folders:
 print(f'Average Speed of Sound: {np.mean(avg_speed):.2f} m/s')
 print()
 
+#%%
+# 2D Array Element Positions
+geometry_path = (os.path.join(PRO_DATA_DIR, data_folders[0]) + '/array_geometry.csv')
+array_geometry = pd.read_csv(geometry_path)
+
+plt.figure(figsize=(6, 6))
+plt.scatter(array_geometry['el_xc'], array_geometry['el_yc'])
+plt.title('2D Array Element Positions')
+plt.show()
 
 #%%
 # Imaging
@@ -121,28 +132,89 @@ y_pixel_size = 0.059e-3 # m
 z_pixel_size = 0.075e-3 # m
 
 #%%
-# Example Binary and Cropping
-img = read_npy(data_folders[0])
+vol1 = read_npy(data_folders[10])
+vol2 = read_npy(data_folders[11])
 
-# Greyscale
-if img.ndim == 4:
-    img = img.mean(axis=-1)
+x_index = 100
 
-# Binary Mask
-threshold = img.mean() + img.std()*1.2
-binary_volume = (img > threshold).astype(float)
+plt.figure(figsize=(6,4))
+
+plt.subplot(1,2,1)
+plt.imshow(vol1[:,x_index,:], cmap='gray')
+
+plt.subplot(1,2,2)
+plt.imshow(vol2[:,x_index,:], cmap='gray')
+
+plt.show()
+
+#%%
+print(data_folders[0])
+print(data_folders[5])
+print(data_folders[10])
+print(data_folders[15])
+
+vol1 = read_npy(data_folders[0])
+vol2 = read_npy(data_folders[5])
+vol3 = read_npy(data_folders[10])
+vol4 = read_npy(data_folders[15])
+
+y_index = 100
+
+plt.figure(figsize=(4,4))
+
+plt.subplot(2,2,1)
+plt.imshow(vol1[:,:,y_index], cmap='gray')
+plt.axis('off')
+
+plt.subplot(2,2,2)
+plt.imshow(vol2[:,:,y_index], cmap='gray')
+plt.axis('off')
+
+plt.subplot(2,2,3)
+plt.imshow(vol3[:,:,y_index], cmap='gray')
+plt.axis('off')
+
+plt.subplot(2,2,4)
+plt.imshow(vol4[:,:,y_index], cmap='gray')
+
+plt.axis('off')
+plt.show()
+
+#%%
+vol1 = read_npy(data_folders[0])
 
 # Cropping
-z_crop_top    = 50
-z_crop_bottom = 20
+z_crop_top    = 200
+z_crop_bottom = 150
 x_crop_left   = 0
 x_crop_right  = 0
 y_crop_left   = 0
 y_crop_right  = 0
 
-z, x, y = binary_volume.shape
+z, x, y = vol1.shape
 
-cropped_volume = binary_volume[
+cropped_volume = vol1[
+    z_crop_top : z - z_crop_bottom,
+    x_crop_left : x - x_crop_right,
+    y_crop_left : y - y_crop_right
+]
+
+
+viewer = napari.Viewer()
+
+viewer.add_image(
+    cropped_volume,
+    name="vol1",
+    colormap="gray"
+)
+napari.run()
+
+#%%
+vol2 = read_npy(data_folders[1])
+
+z, x, y = vol2.shape
+
+cropped_volume = vol2[
     z_crop_top : z - z_crop_bottom,
     x_crop_left : x - x_crop_right,
     y_crop_left : y - y_crop_right
@@ -152,256 +224,108 @@ viewer = napari.Viewer()
 
 viewer.add_image(
     cropped_volume,
-    name="Binary Cropped Volume",
+    name="vol2",
     colormap="gray"
 )
 napari.run()
 
 #%%
-# Binary-ing and Cropping All Data
-reduced_volumes = [[], [], [], []]
+vol1 = read_npy(data_folders[0])
+vol2 = read_npy(data_folders[1])
+max_shift = 100
 
-for i in range(len(groups)):
-    print('i:', i)
-    group = groups[i]
+# Cropping
+z_crop_top    = 80
+z_crop_bottom = 100
+x_crop_left   = 10
+x_crop_right  = 10
+y_crop_left   = 10
+y_crop_right  = 10
 
-    for dat in group:
-        img = read_npy(dat)
-        
-        if img.ndim == 4:
-            img = img.mean(axis=-1)
-        
-        threshold = img.mean() + img.std()*2
-        binary_volume = (img > threshold).astype(float)
+z, x, y = vol1.shape
 
-        cropped_volume = binary_volume[
-            z_crop_top : z - z_crop_bottom,
-            x_crop_left : x - x_crop_right,
-            y_crop_left : y - y_crop_right
-        ]
+vol1 = vol1[
+    z_crop_top : z - z_crop_bottom,
+    x_crop_left : x - x_crop_right,
+    y_crop_left : y - y_crop_right
+]
 
-        reduced_volumes[i].append(cropped_volume)
+z, x, y = vol2.shape
+
+vol2 = vol2[
+    z_crop_top : z - z_crop_bottom,
+    x_crop_left : x - x_crop_right,
+    y_crop_left : y - y_crop_right
+]
+
+best_shiftx, shiftsx, corr_valuesx = normalised_correlation_3D(vol1, vol2, axis='x', max_shift=max_shift)
+best_shifty, shiftsy, corr_valuesy = normalised_correlation_3D(vol1, vol2, axis='y', max_shift=max_shift)
+
+actual_shift = round(5e-3 / x_pixel_size)
+
+print(f'Actual shift: {actual_shift}')
+print(f'Best y shift: {best_shifty}, max correlation: {max(corr_valuesy):.3f}')
+print(f'Best x shift: {best_shiftx}, max correlation: {max(corr_valuesx):.3f}')
 
 #%%
-img = read_npy(groups[0][0])
+for i in range(5, 9):
+    vol1 = read_npy(data_folders[i])
+    vol2 = read_npy(data_folders[i+1])
+    max_shift = 100
+
+    print(f'{data_folders[i]} and {data_folders[i+1]}')
+
+    # Cropping
+    z_crop_top    = 80
+    z_crop_bottom = 100
+    x_crop_left   = 10
+    x_crop_right  = 10
+    y_crop_left   = 10
+    y_crop_right  = 10
+
+    z, x, y = vol1.shape
+
+    vol1 = vol1[
+        z_crop_top : z - z_crop_bottom,
+        x_crop_left : x - x_crop_right,
+        y_crop_left : y - y_crop_right
+    ]
+
+    z, x, y = vol2.shape
+
+    vol2 = vol2[
+        z_crop_top : z - z_crop_bottom,
+        x_crop_left : x - x_crop_right,
+        y_crop_left : y - y_crop_right
+    ]
+
+    best_shiftx, shiftsx, corr_valuesx = normalised_correlation_3D(vol1, vol2, axis='x', max_shift=max_shift)
+    best_shifty, shiftsy, corr_valuesy = normalised_correlation_3D(vol1, vol2, axis='y', max_shift=max_shift)
+
+    actual_shift = round(5e-3 / x_pixel_size)
+
+    print(f'Actual shift: {actual_shift}')
+    print(f'Best y shift: {best_shifty}, max correlation: {max(corr_valuesy):.3f}')
+    print(f'Best x shift: {best_shiftx}, max correlation: {max(corr_valuesx):.3f}')
+    print()
+
+#%%
+canvas1, canvas2 = stitch_volumes(vol1, vol2, best_shiftx, axis='x')
 
 viewer = napari.Viewer()
 
-viewer.add_image(
-    img,
-    name="Test1",
-    colormap="gray"
-)
-napari.run()
-
-#%%
-img = read_npy(groups[0][1])
-
-viewer = napari.Viewer()
-
-viewer.add_image(
-    img,
-    name="Test1",
-    colormap="gray"
-)
-napari.run()
-
-
-#%%
-# Stitching Functions
-def volume_correlation(vol1, vol2, max_shift=100):
-
-    z1, x1, y1 = vol1.shape
-    z2, x2, y2 = vol2.shape
-
-    shifts = range(-max_shift, max_shift + 1)
-    corr_values = []
-
-    for dx in shifts:
-
-        x1_start = max(0, dx)
-        x1_end   = min(x1, x2 + dx)
-
-        x2_start = max(0, -dx)
-        x2_end   = min(x2, x1 - dx)
-
-        if (x1_end - x1_start) <= 0:
-            corr_values.append(0)
-            continue
-
-        region1 = vol1[:, x1_start:x1_end, :]
-        region2 = vol2[:, x2_start:x2_end, :]
-
-        numerator = np.sum(region1 * region2)
-        denom = np.sqrt(np.sum(region1**2) * np.sum(region2**2))
-
-        if denom > 0:
-            corr_values.append(numerator / denom)
-        else:
-            corr_values.append(0)
-
-    corr_values = np.array(corr_values)
-    best_index = np.argmax(corr_values)
-    best_dx = shifts[best_index]
-
-    return best_dx, shifts, corr_values
-
-def volume_correlation_y(vol1, vol2, max_shift=100):
-
-    z1, x1, y1 = vol1.shape
-    z2, x2, y2 = vol2.shape
-
-    shifts = range(-max_shift, max_shift + 1)
-    corr_values = []
-
-    for dy in shifts:
-
-        y1_start = max(0, dy)
-        y1_end   = min(y1, y2 + dy)
-
-        y2_start = max(0, -dy)
-        y2_end   = min(y2, y1 - dy)
-
-        if (y1_end - y1_start) <= 0:
-            corr_values.append(0)
-            continue
-
-        region1 = vol1[:, :, y1_start:y1_end]
-        region2 = vol2[:, :, y2_start:y2_end]
-
-        numerator = np.sum(region1 * region2)
-        denom = np.sqrt(np.sum(region1**2) * np.sum(region2**2))
-
-        corr_values.append(numerator / denom if denom > 0 else 0)
-
-    corr_values = np.array(corr_values)
-
-    best_index = np.argmax(corr_values)
-    best_dy = shifts[best_index]
-
-    return best_dy, shifts, corr_values
-
-def stitch_volumes(vol1, vol2, shift, axis=1):
-    """
-    vol1, vol2 : volumes with shape (z, x, y)
-    shift      : pixel shift
-    axis       : 1 = x direction, 2 = y direction
-    """
-
-    z1, x1, y1 = vol1.shape
-    z2, x2, y2 = vol2.shape
-
-    if axis == 1:   # shift in x
-
-        left_offset = max(0, -shift)
-        right_extent = max(x1, x2 + shift)
-        total_x = left_offset + right_extent
-
-        canvas1 = np.zeros((z1, total_x, y1))
-        canvas2 = np.zeros((z1, total_x, y1))
-
-        canvas1[:, left_offset:left_offset + x1, :] = vol1
-
-        x2_start = left_offset + shift
-        canvas2[:, x2_start:x2_start + x2, :] = vol2
-
-    elif axis == 2:   # shift in y
-
-        left_offset = max(0, -shift)
-        right_extent = max(y1, y2 + shift)
-        total_y = left_offset + right_extent
-
-        canvas1 = np.zeros((z1, x1, total_y))
-        canvas2 = np.zeros((z1, x1, total_y))
-
-        canvas1[:, :, left_offset:left_offset + y1] = vol1
-
-        y2_start = left_offset + shift
-        canvas2[:, :, y2_start:y2_start + y2] = vol2
-
-    else:
-        raise ValueError("axis must be 1 (x) or 2 (y)")
-
-    return canvas1, canvas2
-
-#%%
-# Example Stitch
-vol1 = reduced_volumes[0][0]
-vol2 = reduced_volumes[0][1]
-
-dx, shifts, corr = volume_correlation(vol1, vol2, max_shift=100)
-
-error = abs(((5e-3 - abs(dx * x_pixel_size))/(5e-3)) * 100)
-
-print('x')
-print(f'Pixel Shift: {-1*dx}')
-print(f'Distance Calculated: {-1 * dx * x_pixel_size * 1000:.3f} mm')
-print(f'Actual Distance: 5 mm')
-print(f'Approximate Error: {error:.3f}%')
-
-dy, shifts, corr = volume_correlation_y(vol1, vol2, max_shift=100)
-
-error = abs(((5e-3 - abs(dy * y_pixel_size))/(5e-3)) * 100)
-
-print('y')
-print(f'Pixel Shift: {-1*dy}')
-print(f'Distance Calculated: {-1 * dy * y_pixel_size * 1000:.3f} mm')
-print(f'Actual Distance: 5 mm')
-print(f'Approximate Error: {error:.3f}%')
-
-
-#%%
-canvas1, canvas2 = stitch_volumes(vol1, vol2, -85, axis=2)
-
-viewer = napari.Viewer()
-
-viewer.add_image(
-    canvas1,
-    name="Volume 1",
-    colormap="red",
-    blending="additive"
-)
-
-viewer.add_image(
-    canvas2,
-    name="Volume 2",
-    colormap="cyan",
-    blending="additive"
-)
+viewer.add_image(canvas1, name="vol1", colormap="red")
+viewer.add_image(canvas2, name="vol2", colormap="blue", opacity=0.5)
 
 napari.run()
 
 #%%
-groupA = reduced_volumes[0]
+canvas1, canvas2 = stitch_volumes(vol1, vol2, actual_shift, axis='y')
 
-shift = 85
-axis = 1   # 1 = x direction, 2 = y direction
-
-stitched_volume = groupA[0]
-
-for i in range(1, len(groupA)):
-
-    next_vol = groupA[i]
-
-    canvas1, canvas2 = stitch_volumes(
-        stitched_volume,
-        next_vol,
-        shift,
-        axis=axis
-    )
-
-    # combine the two volumes
-    stitched_volume = np.maximum(canvas1, canvas2)
-
-#%%
 viewer = napari.Viewer()
 
-viewer.add_image(
-    stitched_volume,
-    name="Stitched Volume A",
-    colormap="gray"
-)
+viewer.add_image(canvas1, name="vol1", colormap="red")
+viewer.add_image(canvas2, name="vol2", colormap="blue", opacity=0.5)
 
 napari.run()
 
-#%%
