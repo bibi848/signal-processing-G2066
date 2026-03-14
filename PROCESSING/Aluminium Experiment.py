@@ -25,7 +25,7 @@ import h5py
 
 from Classes.CalcSpeedOfSound import calcSpeedOfSound
 from Classes.Stitch2D import normalised_correlation_2D
-from Classes.Stitch2D import stitch_visualisation2D
+from Classes.Stitch2D import stitch_images
 
 #%%
 # Self-defined Functions
@@ -121,6 +121,13 @@ depth_pixel_size   = 0.038e-3 # m
 
 #%%
 # Example Binary and Cropped Images
+# Processing Parameters
+binary_threshold = 0.78
+left_crop = 200
+right_crop = int(left_crop + (800 - 2*left_crop))
+top_crop = int(800 / 4)
+bottom_crop = 0
+
 img1 = read_png(image_files1[2])
 img2 = read_png(image_files1[3])
 
@@ -129,12 +136,6 @@ if img1.ndim == 3: img1 = img1.mean(axis=2)
 else: img1 = img1
 if img2.ndim == 3: img2 = img2.mean(axis=2)
 else: img2 = img2
-
-binary_threshold = 0.78
-left_crop = 200
-right_crop = int(left_crop + (800 - 2*left_crop))
-top_crop = int(800 / 4)
-bottom_crop = 0
 
 crop = (
     slice(top_crop, 800 - bottom_crop),
@@ -199,7 +200,7 @@ img1 = reduced_images1[1]
 img2 = reduced_images1[2]
 
 dx, shifts, corr_values = normalised_correlation_2D(img1, img2)
-combined_image, left_offset, w1, x2, w2 = stitch_visualisation2D(img1, img2, dx)
+combined_image, left_offset, w1, x2, w2 = stitch_images(img1, img2, dx)
 error = abs(((5e-3 - abs(dx * lateral_pixel_size))/(5e-3)) * 100)
 
 plt.figure(figsize=(10,6))
@@ -260,7 +261,7 @@ for i, dx in enumerate(dxes1):
 
     next_img = full_images1[i+1]
 
-    stitched_image1, left_offset, w1, x2, w2 = stitch_visualisation2D(
+    stitched_image1, left_offset, w1, x2, w2 = stitch_images(
         stitched_image1,
         next_img,
         dx,
@@ -272,7 +273,7 @@ for i, dx in enumerate(dxes2):
 
     next_img = full_images2[i+1]
 
-    stitched_image2, left_offset, w1, x2, w2 = stitch_visualisation2D(
+    stitched_image2, left_offset, w1, x2, w2 = stitch_images(
         stitched_image2,
         next_img,
         dx,

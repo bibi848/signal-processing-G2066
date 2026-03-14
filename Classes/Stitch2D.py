@@ -40,21 +40,7 @@ def normalised_correlation_2D(img1, img2):
 
     return best_dx, shifts, corr_values
 
-def fft_correlation_2D(img1, img2):
-    f1 = np.fft.fft2(img1)
-    f2 = np.fft.fft2(img2)
-
-    cross_power = f1 * np.conj(f2)
-
-    corr = np.fft.ifft2(cross_power)
-
-    corr = np.abs(corr)
-
-    shift = np.unravel_index(np.argmax(corr), corr.shape)
-
-    return shift, corr
-
-def stitch_visualisation2D(img1, img2, dx, colour_bool=True):
+def stitch_images(img1, img2, dx, colour_bool=True):
 
     h1, w1 = img1.shape
     h2, w2 = img2.shape
@@ -88,7 +74,6 @@ def stitch_visualisation2D(img1, img2, dx, colour_bool=True):
         stitched = np.clip(stitched, 0, 1)
 
     else:
-        # normal grayscale stitching
         stitched = np.maximum(canvas1, canvas2)
 
     return stitched, left_offset, w1, x2, w2
