@@ -16,7 +16,7 @@ def calcSpeedOfSound(time_seconds, time_data, time_threshold, threshold_shift,
     sound_speed_list = []
 
     for ele in elements:
-        mask = time_seconds > time_threshold
+        mask = (time_seconds > time_threshold) & (time_seconds < (time_threshold + threshold_shift))
         time_after = time_seconds[mask]
         signal_after = time_data[ele][mask]
 
