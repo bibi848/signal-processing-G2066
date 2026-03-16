@@ -1,0 +1,36 @@
+Unfortunately, the previous experiment taken on the copper sample was unsuccessful. 
+The 2D scans resulted in non-permanent features imaged, meaning no stitching is possible. 
+The scans taken this time will measure each position 4 times, by rotating the array 90 
+degrees each time. 
+Hopefully, this means that the images can be overlayed. 
+Moreover, some 1D array scans will be performed on the copper for extra data, along
+with the usual speed of sound tests. 
+
+Speed of Sound Measurements:
+Imasonic 1D 64els 5.00MHz 0.63mm pitch
+FMC
+25MHz (sample frequency)
+1500 time points
+40dB gain
+30 averages
+
+1D Array Measurements:
+Imasonic 1D 128els 15.00MHz 0.21mm pitch
+FMC
+50 MHz (sample frequency)
+1200 time points
+70dB Gain
+64 averages
+
+For the 2D array measurements, the array is rotated 4 times at each position, using the 
+3D printed guide to ensure measurements are consistent. A photo is attached of the starting position,
+where the array's label faces the camera. The array is rotated anti-clockwise each time, when
+looking down at the array from above. Another photo of this will be attached. 
+
+2D Array Measurements:
+Imasonic 2D Random 128els 7.5MHz 0.77mm min pitch (box says sparse instead of random)
+FMC
+50MHz (sample frequency)
+1200 time points
+70dB gain
+64 averages
