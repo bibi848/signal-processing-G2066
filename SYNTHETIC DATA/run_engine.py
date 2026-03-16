@@ -22,7 +22,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend
 import matplotlib.pyplot as plt
-from typing import Any
+from typing import Any, Optional
 import sys
 import os
 import time
@@ -233,7 +233,7 @@ def visualize(img_db: np.ndarray, x_img: np.ndarray, z_img: np.ndarray,
 
     # Panel 5: TFM B-scan
     extent = [x_img[0]*1e3, x_img[-1]*1e3, z_img[-1]*1e3, z_img[0]*1e3]
-    im = ax5.imshow(img_db, extent=extent, aspect='auto', cmap='hot', vmin=-40, vmax=0)
+    im = ax5.imshow(img_db, extent=extent, aspect='auto', cmap='hot', vmin=-20, vmax=0)
     ax5.set_xlabel('X (mm)')
     ax5.set_ylabel('Depth (mm)')
     ax5.set_title('TFM B-scan (dB)')
@@ -271,7 +271,7 @@ def preview_volume_3d(
 
     Views:
         - Perspective (elevation=25°, azimuth=-55°)
-        - Top-down    (looking along −z, i.e. into the specimen from the array)
+        - Top-down    (looking along -z, i.e. into the specimen from the array)
         - Front       (looking along +y, i.e. the B-scan plane at θ=0°)
 
     Defect colours:   red = sphere, blue = cylinder (SDH), green = crack
@@ -677,6 +677,9 @@ def scan_volume_3d(
     output_dir: str,
     voxel_volume: 'VoxelVolume3D | None' = None,
     born_threshold: float = 0.005,
+    tfm_z_start: float = 10e-3,
+    tfm_z_end: Optional[float] = None,
+    tfm_n_pixels: int = 800,
 ) -> None:
     """
     Scan a 3D specimen with a 1D array rotating around the array centre.
@@ -693,21 +696,26 @@ def scan_volume_3d(
         bscan_<i>.npy — TFM dB image        (n_z, n_x)
 
     Args:
-        specimen:      3D specimen geometry
-        defects_3d:    List of Defect3D instances (may be empty)
-        cfg:           SimulationConfig (array / acquisition / reconstruction)
-        scan_plan:     Rotational scan plan
-        output_dir:    Directory for saving per-frame files
-        voxel_volume:  Optional VoxelVolume3D for grain-noise / voxel defects.
-                       If provided, its Born scatterers are added to every frame.
+        specimen:       3D specimen geometry
+        defects_3d:     List of Defect3D instances (may be empty)
+        cfg:            SimulationConfig (array / acquisition / reconstruction)
+        scan_plan:      Rotational scan plan
+        output_dir:     Directory for saving per-frame files
+        voxel_volume:   Optional VoxelVolume3D for grain-noise / voxel defects.
+                        If provided, its Born scatterers are added to every frame.
         born_threshold: Minimum |δZ / 2Z₀| to include a voxel as a scatterer.
+        tfm_z_start:    TFM reconstruction start depth (m). Default 10 mm.
+        tfm_z_end:      TFM reconstruction end depth (m). Default: thickness − 5 mm.
+        tfm_n_pixels:   TFM pixel grid size (square). Default 800.
     """
     os.makedirs(output_dir, exist_ok=True)
     angles = scan_plan.angles
     n_scans = scan_plan.n_scans
-    rc = cfg.reconstruction
-    half_w = specimen.width / 2
-    z_start = rc.z_start if rc.z_start > 0 else 1e-3
+    half_w = cfg.array.aperture / 2
+
+    # Default z_end: 5 mm before back wall to exclude back-wall echo
+    if tfm_z_end is None:
+        tfm_z_end = specimen.thickness - 5e-3
 
     assert cfg.material is not None, "SimulationConfig.material must be set before scanning"
 
@@ -719,6 +727,10 @@ def scan_volume_3d(
         'specimen_thickness_m': specimen.thickness,
         'specimen_width_m': specimen.width,
         'specimen_depth_m': specimen.depth,
+        'tfm_z_start_m': tfm_z_start,
+        'tfm_z_end_m': tfm_z_end,
+        'tfm_n_pixels': tfm_n_pixels,
+        'array_aperture_m': cfg.array.aperture,
     }
     np.save(os.path.join(output_dir, 'scan_meta.npy'), meta, allow_pickle=True)  # type: ignore[arg-type]
 
@@ -737,8 +749,8 @@ def scan_volume_3d(
     born_z_grid = np.linspace(born_z_start, specimen.thickness,
                               max(2, int((specimen.thickness - born_z_start) / 5e-4) + 1))
     born_l_grid = np.linspace(
-        -specimen.width / 2, specimen.width / 2,
-        max(2, int(specimen.width / 5e-4) + 1),
+        -half_w, half_w,
+        max(2, int(cfg.array.aperture / 5e-4) + 1),
     )
 
     for i, theta in enumerate(angles):
@@ -763,6 +775,13 @@ def scan_volume_3d(
                 threshold=born_threshold,
             )
             if len(z_s) > 0:
+                # Jitter scatterer positions by ±half grid spacing to break
+                # the regular-grid alignment that causes vertical streak artifacts
+                dz = born_z_grid[1] - born_z_grid[0] if len(born_z_grid) > 1 else 1e-4
+                dl = born_l_grid[1] - born_l_grid[0] if len(born_l_grid) > 1 else 1e-4
+                rng = np.random.default_rng(seed=i)  # per-frame reproducible
+                z_s = z_s + rng.uniform(-dz / 2, dz / 2, size=z_s.shape)
+                x_s = x_s + rng.uniform(-dl / 2, dl / 2, size=x_s.shape)
                 engine.set_born_scatterers(z_s, x_s, amp_s)
                 n_born = len(z_s)
 
@@ -782,13 +801,11 @@ def scan_volume_3d(
         fmc = apply_bandpass_filter(fmc, cfg.dt, cfg.array.frequency,
                                     bandwidth_fraction=cfg.array.bandwidth)
 
-        # Exclude back wall from TFM z_range so it doesn't become the 0 dB reference
-        z_end_tfm = specimen.thickness - 3e-3  # 3 mm before back wall
         img_db, _, _ = reconstruct_tfm(
             fmc, time_axis, elem_x, cfg.material.c_L,
             x_range=(-half_w, half_w),
-            z_range=(z_start, z_end_tfm),
-            n_pixels=300,
+            z_range=(tfm_z_start, tfm_z_end),
+            n_pixels=tfm_n_pixels,
         )
 
         # Save this frame
@@ -851,17 +868,21 @@ def main():
     #
     USE_VOXEL_WORLD = True
     voxel_volume = None
+    frequency = 10e6                                    # Hz — array centre frequency
+    wavelength = ALUMINUM.c_L / frequency               # λ in the specimen material
+    voxel_size = wavelength / 3                         # sub-wavelength voxels (λ/3)
     if USE_VOXEL_WORLD:
-        print("\nGenerating voxel grain structure...")
+        print(f"\nGenerating voxel grain structure (λ = {wavelength*1e3:.2f} mm, "
+              f"voxel = {voxel_size*1e3:.2f} mm ≈ λ/3)...")
         grain_vol = generate_grain_structure(
             thickness           = specimen.thickness,
             width               = specimen.width,
             depth               = specimen.depth,
             background_material = ALUMINUM,
-            mean_grain_size_m   = 2.0e-3,   # 2 mm mean grain diameter
+            mean_grain_size_m   = 0.5e-3,   # 500 µm mean grain diameter
             impedance_variation = 0.025,     # ±2.5 % per-grain Z spread → grain amp ≈ ±0.0125
             wavespeed_variation = 0.005,     # ±0.5 % per-grain c_L spread
-            voxel_size_m        = 0.5e-3,    # 0.5 mm voxels
+            voxel_size_m        = voxel_size,
         )
         # Burn defects into the grain volume as near-zero impedance (R ≈ −1, amp ≈ −0.5)
         # This gives defect/grain amplitude ratio ≈ 40:1 ≈ 32 dB
@@ -876,7 +897,7 @@ def main():
                                theta_end=np.pi / 2)
     cfg = SimulationConfig(
         specimen=SpecimenConfig(thickness=specimen.thickness, width=specimen.width),
-        array=ArrayConfig(num_elements=64, element_pitch=0.6e-3, frequency=10e6),
+        array=ArrayConfig(num_elements=64, element_pitch=0.6e-3, frequency=frequency),
         scan_plan=scan_plan,
         max_bounces=2,
         mode_conversion=False,

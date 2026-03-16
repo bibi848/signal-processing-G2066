@@ -624,12 +624,18 @@ class FMCEngine:
         dx = self._born_x[np.newaxis, :] - elem_x[:, np.newaxis]
         r  = np.sqrt(dz ** 2 + dx ** 2)
 
+        # Element directivity: sinc pattern suppresses off-axis contributions
+        theta_el = np.arctan2(np.abs(dx), np.abs(dz))   # (n_el, n_s)
+        wavelength = c_L / freq
+        dir_factor = element_directivity_array(theta_el, cfg.array.element_width, wavelength)
+
         # TOF and amplitude: (n_el, n_el, n_s)
         r_tx   = r[:, np.newaxis, :]
         r_rx   = r[np.newaxis, :, :]
         tof    = (r_tx + r_rx) / c_L
         spread = 1.0 / np.sqrt(np.maximum(r_tx * r_rx, 1e-20))
-        amp    = (self._born_amp[np.newaxis, np.newaxis, :] * spread).astype(np.float32)
+        directivity = dir_factor[:, np.newaxis, :] * dir_factor[np.newaxis, :, :]
+        amp    = (self._born_amp[np.newaxis, np.newaxis, :] * spread * directivity).astype(np.float32)
 
         # Sample indices: (n_el, n_el, n_s)
         tof_samp = np.round(tof / dt).astype(np.int32)
