@@ -17,13 +17,20 @@ root_path = Path(__file__).resolve().parent.parent
 if str(root_path) not in sys.path:
     sys.path.append(str(root_path))
 
-import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
 import pandas as pd
+import numpy as np
+import napari
 import h5py
 
 from Classes.CalcSpeedOfSound import calcSpeedOfSound
+from Classes.Stitch3D import normalised_correlation_3D
+from Classes.Stitch3D import stitch_volumes
+
+#%%
+# Self described functions
+def read_npy(npy):
+    return np.load(IMG_DATA_DIR + '/' + npy + '_3D_TFM.npy')
 
 #%%
 # Extracting Data
@@ -49,11 +56,13 @@ print('Folders available in directory:')
 print(image_folders)
 print()
 
+speed_of_sound_folders = [x for x in image_folders if 'Speed of Sound' in x]
+data_folders = [x for x in image_folders if "Calibration" not in x]
+data_folders = [x for x in data_folders if "Speed of Sound" not in x]
+groups = [data_folders[i:i+5] for i in range(0, len(data_folders), 5)]
+
 #%%
 # Speed of Sound Calculations
-
-speed_of_sound_folders = [x for x in image_folders if 'Speed of Sound' in x]
-
 block_depth = 50e-3
 t_threshold = 1e-5
 threshold_shift = 2e-5
@@ -83,6 +92,15 @@ for folder in speed_of_sound_folders:
 print(f'Average Speed of Sound: {np.mean(avg_speed):.2f} m/s')
 print()
 
+#%%
+# 2D Array Element Positions
+geometry_path = (os.path.join(PRO_DATA_DIR, data_folders[0]) + '/array_geometry.csv')
+array_geometry = pd.read_csv(geometry_path)
+
+plt.figure(figsize=(6, 6))
+plt.scatter(array_geometry['el_xc'], array_geometry['el_yc'])
+plt.title('2D Array Element Positions')
+plt.show()
 
 #%%
 # Imaging
@@ -94,221 +112,220 @@ Percentage band = 45%
 Hanning window = False
 
 The Imaging.py then used the following parameters for the imaging:
-c = 6126.44 m/s
+c = 4703.28 m/s
 z_max = 10 mm
 z_min = 40 mm
 vmax = 0
 vmin = -20
-x_pixels = 800
-z_pixels = 800
+x_pixels = 200
+y_pixels = 200
+z_pixels = 400
 This resulted in the images used for stitching, as well as the pixel size.
 '''
 
-c = 6126.44 # m/s
-x_pixels = 800
-z_pixels = 800
-lateral_pixel_size = 0.048e-3 # m
-depth_pixel_size   = 0.038e-3 # m
+c = 4703.28 # m/s
+x_pixels = 200
+y_pixels = 200
+z_pixels = 400
+x_pixel_size = 0.059e-3 # m
+y_pixel_size = 0.059e-3 # m
+z_pixel_size = 0.075e-3 # m
 
 #%%
-# Example Binary and Cropped Images
-img1 = read_png(image_files1[1])
-img2 = read_png(image_files1[2])
+vol1 = read_npy(data_folders[10])
+vol2 = read_npy(data_folders[11])
 
-# Grey scale
-if img1.ndim == 3: img1 = img1.mean(axis=2)
-else: img1 = img1
-if img2.ndim == 3: img2 = img2.mean(axis=2)
-else: img2 = img2
+x_index = 100
 
-threshold = 0.75
+plt.figure(figsize=(6,4))
 
-binary1 = (img1 > threshold).astype(float)
-binary2 = (img2 > threshold).astype(float)
+plt.subplot(1,2,1)
+plt.imshow(vol1[:,x_index,:], cmap='gray')
 
-left_crop = 230
-right_crop = int(left_crop + (800 - 2*left_crop))
-top_crop = int(800 / 5)
-bottom_crop = 0
+plt.subplot(1,2,2)
+plt.imshow(vol2[:,x_index,:], cmap='gray')
 
-plt.imshow(binary1, cmap="gray")
-plt.axvline(left_crop, linewidth=1.5, c='r')
-plt.axvline(right_crop, linewidth=1.5, c='r')
-plt.axhline(top_crop, linewidth=1.5, c='r')
-plt.axis("off")
-plt.show()
-
-plt.imshow(binary2, cmap="gray")
-plt.axvline(left_crop, linewidth=1.5, c='r')
-plt.axvline(right_crop, linewidth=1.5, c='r')
-plt.axhline(top_crop, linewidth=1.5, c='r')
-plt.axis("off")
 plt.show()
 
 #%%
-# Binary-ing and Cropping All Data
-binary_threshold = 0.75
-left_crop = 240
-right_crop = int(left_crop + (800 - 2*left_crop))
-top_crop = int(800 / 4)
-bottom_crop = 0
+print(data_folders[0])
+print(data_folders[5])
+print(data_folders[10])
+print(data_folders[15])
 
-reduced_images1 = []
-reduced_images2 = []
+vol1 = read_npy(data_folders[0])
+vol2 = read_npy(data_folders[5])
+vol3 = read_npy(data_folders[10])
+vol4 = read_npy(data_folders[15])
 
-for image_name in image_files1:
-    img = read_png(image_name)
+y_index = 100
 
-    # Grey Scale
-    if img.ndim == 3: img = img.mean(axis=2)
-    else: img = img
+plt.figure(figsize=(4,4))
 
-    # Binary Image
-    binary_img  = (img > binary_threshold).astype(float)
-    h, w = binary_img.shape
+plt.subplot(2,2,1)
+plt.imshow(vol1[:,:,y_index], cmap='gray')
+plt.axis('off')
 
-    # Cropped Image
-    cropped_img = binary_img[
-        top_crop  : h - bottom_crop,
-        left_crop : w - left_crop
+plt.subplot(2,2,2)
+plt.imshow(vol2[:,:,y_index], cmap='gray')
+plt.axis('off')
+
+plt.subplot(2,2,3)
+plt.imshow(vol3[:,:,y_index], cmap='gray')
+plt.axis('off')
+
+plt.subplot(2,2,4)
+plt.imshow(vol4[:,:,y_index], cmap='gray')
+
+plt.axis('off')
+plt.show()
+
+#%%
+vol1 = read_npy(data_folders[0])
+
+# Cropping
+z_crop_top    = 200
+z_crop_bottom = 150
+x_crop_left   = 0
+x_crop_right  = 0
+y_crop_left   = 0
+y_crop_right  = 0
+
+z, x, y = vol1.shape
+
+cropped_volume = vol1[
+    z_crop_top : z - z_crop_bottom,
+    x_crop_left : x - x_crop_right,
+    y_crop_left : y - y_crop_right
+]
+
+
+viewer = napari.Viewer()
+
+viewer.add_image(
+    cropped_volume,
+    name="vol1",
+    colormap="gray"
+)
+napari.run()
+
+#%%
+vol2 = read_npy(data_folders[1])
+
+z, x, y = vol2.shape
+
+cropped_volume = vol2[
+    z_crop_top : z - z_crop_bottom,
+    x_crop_left : x - x_crop_right,
+    y_crop_left : y - y_crop_right
+]
+
+viewer = napari.Viewer()
+
+viewer.add_image(
+    cropped_volume,
+    name="vol2",
+    colormap="gray"
+)
+napari.run()
+
+#%%
+vol1 = read_npy(data_folders[0])
+vol2 = read_npy(data_folders[1])
+max_shift = 100
+
+# Cropping
+z_crop_top    = 80
+z_crop_bottom = 100
+x_crop_left   = 10
+x_crop_right  = 10
+y_crop_left   = 10
+y_crop_right  = 10
+
+z, x, y = vol1.shape
+
+vol1 = vol1[
+    z_crop_top : z - z_crop_bottom,
+    x_crop_left : x - x_crop_right,
+    y_crop_left : y - y_crop_right
+]
+
+z, x, y = vol2.shape
+
+vol2 = vol2[
+    z_crop_top : z - z_crop_bottom,
+    x_crop_left : x - x_crop_right,
+    y_crop_left : y - y_crop_right
+]
+
+best_shiftx, shiftsx, corr_valuesx = normalised_correlation_3D(vol1, vol2, axis='x', max_shift=max_shift)
+best_shifty, shiftsy, corr_valuesy = normalised_correlation_3D(vol1, vol2, axis='y', max_shift=max_shift)
+
+actual_shift = round(5e-3 / x_pixel_size)
+
+print(f'Actual shift: {actual_shift}')
+print(f'Best y shift: {best_shifty}, max correlation: {max(corr_valuesy):.3f}')
+print(f'Best x shift: {best_shiftx}, max correlation: {max(corr_valuesx):.3f}')
+
+#%%
+for i in range(5, 9):
+    vol1 = read_npy(data_folders[i])
+    vol2 = read_npy(data_folders[i+1])
+    max_shift = 100
+
+    print(f'{data_folders[i]} and {data_folders[i+1]}')
+
+    # Cropping
+    z_crop_top    = 80
+    z_crop_bottom = 100
+    x_crop_left   = 10
+    x_crop_right  = 10
+    y_crop_left   = 10
+    y_crop_right  = 10
+
+    z, x, y = vol1.shape
+
+    vol1 = vol1[
+        z_crop_top : z - z_crop_bottom,
+        x_crop_left : x - x_crop_right,
+        y_crop_left : y - y_crop_right
     ]
-    reduced_images1.append(cropped_img)
 
-for image_name in image_files2:
-    img = read_png(image_name)
+    z, x, y = vol2.shape
 
-    # Gray Scale
-    if img.ndim == 3: img = img.mean(axis=2)
-    else: img = img
-
-    # Binary Image
-    binary_img  = (img > binary_threshold).astype(float)
-    h, w = binary_img.shape
-
-    # Cropped Image
-    cropped_img = binary_img[
-        top_crop  : h - bottom_crop,
-        left_crop : w - left_crop
+    vol2 = vol2[
+        z_crop_top : z - z_crop_bottom,
+        x_crop_left : x - x_crop_right,
+        y_crop_left : y - y_crop_right
     ]
-    reduced_images2.append(cropped_img)
+
+    best_shiftx, shiftsx, corr_valuesx = normalised_correlation_3D(vol1, vol2, axis='x', max_shift=max_shift)
+    best_shifty, shiftsy, corr_valuesy = normalised_correlation_3D(vol1, vol2, axis='y', max_shift=max_shift)
+
+    actual_shift = round(5e-3 / x_pixel_size)
+
+    print(f'Actual shift: {actual_shift}')
+    print(f'Best y shift: {best_shifty}, max correlation: {max(corr_valuesy):.3f}')
+    print(f'Best x shift: {best_shiftx}, max correlation: {max(corr_valuesx):.3f}')
+    print()
 
 #%%
-# Example Stitch
-img1 = reduced_images1[0]
-img2 = reduced_images2[1]
+canvas1, canvas2 = stitch_volumes(vol1, vol2, best_shiftx, axis='x')
 
-dx, shifts, corr_values = horizontal_correlation(img1, img2)
-combined_image, left_offset, w1, x2, w2 = stitch_horizontal(img1, img2, dx)
-error = abs(((5e-3 - abs(dx * lateral_pixel_size))/(5e-3)) * 100)
+viewer = napari.Viewer()
 
-plt.figure(figsize=(10,6))
-plt.imshow(combined_image)
-plt.axis("off")
+viewer.add_image(canvas1, name="vol1", colormap="red")
+viewer.add_image(canvas2, name="vol2", colormap="blue", opacity=0.5)
 
-plt.axvline(left_offset, linestyle=":", linewidth=2)
-plt.axvline(left_offset + w1, linestyle=":", linewidth=2)
-plt.axvline(x2, linestyle=":", linewidth=2)
-plt.axvline(x2 + w2, linestyle=":", linewidth=2)
-
-plt.show()
-
-print(f'Pixel Shift: {-1*dx}')
-print(f'Distance Calculated: {-1 * dx * lateral_pixel_size * 1000:.3f} mm')
-print(f'Actual Distance: 5 mm')
-print(f'Approximate Error: {error:.3f}%')
+napari.run()
 
 #%%
-# Finding all Pixel Shifts
+canvas1, canvas2 = stitch_volumes(vol1, vol2, actual_shift, axis='y')
 
-dxes1 = []
-dxes2 = []
+viewer = napari.Viewer()
 
-for i, r_img in enumerate(reduced_images1[:-1]):
-    img1 = r_img
-    img2 = reduced_images1[i+1]
+viewer.add_image(canvas1, name="vol1", colormap="red")
+viewer.add_image(canvas2, name="vol2", colormap="blue", opacity=0.5)
 
-    dx, shifts, corr_values = horizontal_correlation(img1, img2)
-    dxes1.append(dx)
+napari.run()
 
-for i, r_img in enumerate(reduced_images2[:-1]):
-    img1 = r_img
-    img2 = reduced_images2[i+1]
-
-    dx, shifts, corr_values = horizontal_correlation(img1, img2)
-    dxes2.append(dx)
-
-#%%
-# Converting Full Images to Greyscale
-full_images1 = []
-full_images2 = []
-
-for image_name in image_files1:
-    img = read_png(image_name)
-    if img.ndim == 3: img = img.mean(axis=2)
-    full_images1.append(img)
-
-for image_name in image_files2:
-    img = read_png(image_name)
-    if img.ndim == 3: img = img.mean(axis=2)
-    full_images2.append(img)
-
-#%%
-# Cumulative Shifting
-stitched_image1 = full_images1[0]
-
-for i, dx in enumerate(dxes1):
-
-    next_img = full_images1[i+1]
-
-    stitched_image1, left_offset, w1, x2, w2 = stitch_horizontal(
-        stitched_image1,
-        next_img,
-        dx,
-        colour_bool=False
-    )
-
-stitched_image2 = full_images2[0]
-for i, dx in enumerate(dxes2):
-
-    next_img = full_images2[i+1]
-
-    stitched_image2, left_offset, w1, x2, w2 = stitch_horizontal(
-        stitched_image2,
-        next_img,
-        dx,
-        colour_bool=False
-    )
-
-#%%
-# Display Shifted Data
-plt.figure(figsize=(12,6))
-plt.imshow(stitched_image1, cmap="gray")
-plt.axis("off")
-plt.show()
-
-plt.figure(figsize=(12,6))
-plt.imshow(stitched_image2, cmap="gray")
-plt.axis("off")
-plt.show()
-
-avg_shift1 = np.mean(dxes1)
-avg_shift2 = np.mean(dxes2)
-
-avg_dist1 = -1 * avg_shift1 * lateral_pixel_size
-avg_dist2 = -1 * avg_shift2 * lateral_pixel_size
-
-error1 = abs((5e-3 - abs(avg_dist1)) / 5e-3) * 100
-error2 = abs((5e-3 - abs(avg_dist2)) / 5e-3) * 100
-
-print('Image 1')
-print(f'Average Pixel Shift: {avg_shift1 * -1} pixels')
-print(f'Average Calculated Distance: {avg_dist1 * 1000:.3f} mm')
-print(f'Average Calculated Error: {error1:.3f}%')
-
-print()
-print('Image 2')
-print(f'Average Pixel Shift: {avg_shift2 * -1} pixels')
-print(f'Average Calculated Distance: {avg_dist2 * 1000:.3f} mm')
-print(f'Average Calculated Error: {error2:.3f}%')
-
-#%%
