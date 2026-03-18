@@ -9,6 +9,7 @@ python Display3DData.py
 In your terminal (one by one) worked for me. 
 Linux: export QT_QPA_PLATFORM=xcb
 '''
+#%%
 import os
 import sys
 import numpy as np
@@ -42,7 +43,7 @@ if sys.platform == 'darwin':
 
 # Point the script to the correct subfolder.
 input_data_folder    = '2D TFM Data'
-input_data_subfolder = 'Cu Pure 7.5MHz Ex 11032026 Filtered'
+input_data_subfolder = 'Cu Pure 7.5MHz Ex 16032026 Filtered'
 cwd                  = os.getcwd()
 
 IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, input_data_subfolder)
@@ -57,7 +58,7 @@ print('Files available in directory:')
 print(npy_files)
 print()
 
-img = np.load(os.path.join(IN_DIR, "A1_filtered_3D_TFM.npy"))
+img = np.load(os.path.join(IN_DIR, "11_filtered_3D_TFM.npy"))
 
 viewer = napari.Viewer()
 viewer.add_image(

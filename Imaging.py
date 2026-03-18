@@ -18,9 +18,9 @@ from Classes.TFM1D import CTFM1D
 from Classes.TFM1D import TFM_angular1D
 
 # Point the script to the correct subfolder.
-input_data_folder    = '1D Processed Data'
-input_data_subfolder = 'Al Pure 10MHz Ex 09032026'
-output_data_folder   = '1D TFM Data'
+input_data_folder    = '2D Processed Data'
+input_data_subfolder = 'Cu Pure 7.5MHz Ex 16032026'
+output_data_folder   = '2D TFM Data'
 cwd                  = os.getcwd()
 
 display_picture = False
@@ -42,9 +42,9 @@ half_angle_deg = 30
 min_els        = 40
 
 # Image Parameters
-c        = 6126.44  # m/s
-z_max    = 10e-3 # m
-z_min    = 40e-3 # m
+c        = 4705.38 # m/s
+z_max    = 15e-3   # m
+z_min    = 40e-3   # m
 x_min    = 'xc_min' # m, can specify length
 x_max    = 'xc_max' # or just use xc_min/xc_max
 x_pixels = 800
@@ -76,6 +76,9 @@ image_folders = [
     if os.path.isdir(os.path.join(IN_DIR, f))
 ]
 image_folders = np.sort(image_folders)
+if "2D" in input_data_folder:
+    image_folders = [x for x in image_folders if '1D' in x]    
+
 print('Files available in directory:')
 print(image_folders)
 print()
@@ -246,6 +249,10 @@ print(f'Time to process {len(image_folders)} images: {full_end - full_start:.6f}
 # Pixel size
 dx_mm = (x_img[-1] - x_img[0]) * 1e3 / (x_pixels - 1)
 dz_mm = (z_img[-1] - z_img[0]) * 1e3 / (z_pixels - 1)
+centre_frequency = float(metadata.loc[metadata['Field'] == 'centre_frequency_Hz', 'Value'].iloc[0])
+wavelength = c / centre_frequency
 
 print(f"Lateral pixel size: {dx_mm:.3f} mm")
 print(f"Depth pixel size:   {dz_mm:.3f} mm")
+print(f"Centre Frequency:   {centre_frequency/1e6} MHz")
+print(f"Wavelength:         {wavelength * 1e3:.3f} mm")
