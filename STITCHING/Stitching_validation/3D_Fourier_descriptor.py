@@ -399,11 +399,11 @@ def plot_vote_scores(vote_scores):
 # ==========================================
 
 if __name__ == "__main__":
-    IN_DIR = Path.cwd() / "DATA" / "2D TFM Data" / "FeC Smile 3MHz 04022026 Filtered"
+    IN_DIR = Path.cwd() / "DATA" / "2D TFM Data" / "Cu Pure 7.5MHz Ex 11032026 Filtered"
 
     try:
-        vol1_raw = np.load(IN_DIR / "FeC_40_2_filtered_3D_TFM.npy")
-        vol2_raw = np.load(IN_DIR / "FeC_40_3_filtered_3D_TFM.npy")
+        vol1_raw = np.load(IN_DIR / "A2_filtered_3D_TFM.npy")
+        vol2_raw = np.load(IN_DIR / "A3_filtered_3D_TFM.npy")
 
         vol1_raw = normalize_volume_01(vol1_raw)
         vol2_raw = normalize_volume_01(vol2_raw)
@@ -457,8 +457,17 @@ if __name__ == "__main__":
     trans[2] = stitch_shift
 
     viewer.add_image(
+        v2_bin,
+        name=f"Vol 2 binary (Shifted {stitch_shift}px)",
+        colormap="green",
+        blending="additive",
+        translate=trans,
+        contrast_limits=clim_raw
+    )
+
+    viewer.add_image(
         vol2_raw,
-        name=f"Vol 2 (Shifted {stitch_shift}px)",
+        name=f"Vol 2 raw (Shifted {stitch_shift}px)",
         colormap="magenta",
         blending="additive",
         translate=trans,
