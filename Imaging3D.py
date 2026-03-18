@@ -14,7 +14,7 @@ from scipy.signal import hilbert
 
 # Point the script to the correct subfolder.
 input_data_folder    = '2D Processed Data'
-input_data_subfolder = 'Cu Pure 7.5MHz Ex 11032026'
+input_data_subfolder = 'Cu Pure 7.5MHz Ex 16032026'
 output_data_folder   = '2D TFM Data'
 cwd                  = os.getcwd()
 save_picture         = True
@@ -32,9 +32,9 @@ vmax = 0.0
 vmin = -20.0
 
 # Image Parameters
-c        = 4703.28 # m/s
+c        = 4705.38 # m/s
 z_max    = 5e-3  # m
-z_min    = 40e-3 # m
+z_min    = 25e-3 # m
 x_min    = 'xc_min' # m, can specify length
 x_max    = 'xc_max' # or just use xc_min/xc_max
 y_min    = 'yc_min'
@@ -59,6 +59,7 @@ image_folders = [
     if os.path.isdir(os.path.join(IN_DIR, f))
 ]
 image_folders = [x for x in image_folders if "Speed of Sound" not in x]
+image_folders = [x for x in image_folders if "1D" not in x]
 image_folders = np.sort(image_folders)
 
 print('Files available in directory:')
@@ -185,7 +186,11 @@ print(f'Time to process {len(image_folders)} images: {full_end - full_start:.6f}
 dx_mm = (x_img[-1] - x_img[0]) * 1e3 / (x_pixels - 1)
 dy_mm = (y_img[-1] - y_img[0]) * 1e3 / (y_pixels - 1)
 dz_mm = (z_img[-1] - z_img[0]) * 1e3 / (z_pixels - 1)
+centre_frequency = float(metadata.loc[metadata['Field'] == 'centre_frequency_Hz', 'Value'].iloc[0])
+wavelength = c / centre_frequency
 
 print(f"X-dir pixel size: {dx_mm:.3f} mm")
 print(f"Y-dir pixel size: {dy_mm:.3f} mm")
 print(f"Z-dir pixel size: {dz_mm:.3f} mm")
+print(f"Centre Frequency:   {centre_frequency/1e6} MHz")
+print(f"Wavelength:         {wavelength * 1e3:.3f} mm")
