@@ -18,9 +18,9 @@ from Classes.TFM1D import CTFM1D
 from Classes.TFM1D import TFM_angular1D
 
 # Point the script to the correct subfolder.
-input_data_folder    = '2D Processed Data'
-input_data_subfolder = 'Cu Pure 7.5MHz Ex 16032026'
-output_data_folder   = '2D TFM Data'
+input_data_folder    = '1D Processed Data'
+input_data_subfolder = 'Cu Pure 15MHz 17022026'
+output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
 
 display_picture = False
@@ -37,19 +37,19 @@ threads = 512
 vmax = 0.0
 vmin = -20.0
 
-# Angular Filter
-half_angle_deg = 30
-min_els        = 40
-
 # Image Parameters
-c        = 4705.38 # m/s
-z_max    = 15e-3   # m
+c        = 4700 # m/s
+z_max    = 10e-3   # m
 z_min    = 40e-3   # m
 x_min    = 'xc_min' # m, can specify length
 x_max    = 'xc_max' # or just use xc_min/xc_max
-x_pixels = 800
-z_pixels = 800
-cmap     = 'grey'
+x_pixels = 500
+z_pixels = 700
+cmap     = 'viridis'
+
+# Angular Filter
+half_angle_deg = 30
+min_els        = 40
 
 # Aspect Ratio
 real_aspect_ratio = False

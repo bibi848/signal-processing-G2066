@@ -1,0 +1,4 @@
+# Filtering Parameters
+filter_alpha   = 0.2
+MHz_percentage = 0.1 # percentage
+hanning_bool   = True
