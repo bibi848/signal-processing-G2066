@@ -1,0 +1,32 @@
+# Image Parameters
+c        = 4705.38 # m/s
+z_max    = 15e-3   # m
+z_min    = 40e-3   # m
+x_min    = 'xc_min' # m, can specify length
+x_max    = 'xc_max' # or just use xc_min/xc_max
+x_pixels = 800
+z_pixels = 800
+cmap     = 'grey'
+
+Lateral pixel size: 0.033 mm
+Depth pixel size:   0.031 mm
+Centre Frequency:   15.0 MHz
+Wavelength:         0.314 mm
+
+# 3D Images
+c        = 4705.38 # m/s
+z_max    = 5e-3  # m
+z_min    = 25e-3 # m
+x_min    = 'xc_min' # m, can specify length
+x_max    = 'xc_max' # or just use xc_min/xc_max
+y_min    = 'yc_min'
+y_max    = 'yc_max'
+x_pixels = 200
+y_pixels = 200
+z_pixels = 400
+
+X-dir pixel size: 0.059 mm
+Y-dir pixel size: 0.059 mm
+Z-dir pixel size: 0.050 mm
+Centre Frequency:   7.5 MHz
+Wavelength:         0.627 mm
