@@ -10,3 +10,5 @@ __pycache__
 *.sh
 Test Folder
 SYNTHETIC DATA/legacy/_archived_test_files/
+*.json
+output

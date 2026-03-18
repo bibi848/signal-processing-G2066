@@ -167,14 +167,20 @@ def compute_reconstruction_coords(
     """
     Physical coordinates for the reconstructed volume.
 
+    If output_size is smaller than tfm_n_pixels (e.g. after cube cropping),
+    the lateral extent is scaled proportionally.
+
     Returns:
         (z_coords, y_coords, x_coords) -- 1D arrays in metres
     """
+    full_size = meta.get('tfm_n_pixels', output_size)
     half_ap = meta['array_aperture_m'] / 2.0
+    # Scale lateral extent if cropped
+    half_extent = half_ap * output_size / full_size
     z_coords = np.linspace(meta['tfm_z_start_m'], meta['tfm_z_end_m'],
                            meta['tfm_n_pixels'])
-    x_coords = np.linspace(-half_ap, half_ap, output_size)
-    y_coords = np.linspace(-half_ap, half_ap, output_size)
+    x_coords = np.linspace(-half_extent, half_extent, output_size)
+    y_coords = np.linspace(-half_extent, half_extent, output_size)
     return z_coords, y_coords, x_coords
 
 
@@ -256,7 +262,7 @@ def extract_ground_truth_contrast(
     return contrast
 
 
-# ── Circle mask ───────────────────────────────────────────────────────
+# ── Circle mask & cube cropping ───────────────────────────────────────
 
 def _circle_mask(size: int) -> np.ndarray:
     """Boolean mask for the inscribed circle of a square grid."""
@@ -264,6 +270,31 @@ def _circle_mask(size: int) -> np.ndarray:
     y, x = np.ogrid[:size, :size]
     r_sq = (y - center) ** 2 + (x - center) ** 2
     return r_sq <= (size / 2.0) ** 2
+
+
+def crop_cylinder_to_cube(volume: np.ndarray) -> np.ndarray:
+    """
+    Crop a cylindrical reconstruction to the largest inscribed cube.
+
+    The inverse Radon with circle=True produces a cylinder (circle in x-y,
+    full extent in z). The inscribed square has side = diameter / sqrt(2).
+    This crops each x-y slice to that square, giving a cuboidal volume.
+
+    Args:
+        volume: (n_z, n_y, n_x) — cylindrical reconstruction
+
+    Returns:
+        (n_z, side, side) — cropped cube
+    """
+    n_z, n_y, n_x = volume.shape
+    diameter = min(n_y, n_x)
+    side = int(diameter / np.sqrt(2))
+
+    y_start = (n_y - side) // 2
+    x_start = (n_x - side) // 2
+
+    cropped = volume[:, y_start:y_start + side, x_start:x_start + side]
+    return cropped
 
 
 # ── Quantitative comparison ──────────────────────────────────────────
@@ -413,6 +444,17 @@ def view_reconstruction_napari(
             diff, name='|Difference|',
             scale=scale, colormap='turbo', opacity=0.7, visible=False,
         )
+        # Overlay: grain structure (cyan) + signal (magenta) via additive blending
+        viewer.add_image(
+            ground_truth / g_max, name='Overlay — grain structure',
+            scale=scale, colormap='cyan', opacity=0.6,
+            blending='additive', visible=False,
+        )
+        viewer.add_image(
+            recon / r_max, name='Overlay — signal',
+            scale=scale, colormap='magenta', opacity=0.6,
+            blending='additive', visible=False,
+        )
 
     viewer.dims.axis_labels = ('z - depth (mm)', 'y (mm)', 'x (mm)')
     print("napari viewer open -- close the window to continue")
@@ -511,6 +553,7 @@ def reconstruct_and_compare(
     show_napari: bool = False,
     save_figures: bool = True,
     output_dir: Optional[str] = None,
+    crop_to_cube: bool = False,
 ) -> tuple:
     """
     Full reconstruction pipeline: load -> reconstruct -> compare -> visualise.
@@ -557,6 +600,13 @@ def reconstruct_and_compare(
         sinograms, angles_deg,
         filter_name=filter_name, circle=circle, output_size=output_size,
     )
+
+    # 5b. Optionally crop cylinder to inscribed cube
+    if crop_to_cube:
+        volume_recon = crop_cylinder_to_cube(volume_recon)
+        print(f"  Cropped to cube: {volume_recon.shape}")
+        # Adjust output_size for coordinate computation
+        output_size = volume_recon.shape[1]
 
     # Save reconstructed volume
     recon_path = os.path.join(output_dir, 'recon_volume.npy')
