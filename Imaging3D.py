@@ -6,6 +6,7 @@ This script converts the 2D array files processed previously into 3D TFM images.
 # Importing Functions and Defining Correct Path
 import pandas as pd
 import numpy as np
+import platform
 import os
 import sys
 import time
@@ -68,7 +69,6 @@ print()
 
 # Import the appropriate module
 if engine == 'cpp':
-    import platform
     if platform.system() == 'Windows':
         build_dir = os.path.join(os.path.dirname(__file__), "build", "CPP", "TFM", "Debug")
     else:

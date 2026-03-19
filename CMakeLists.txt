@@ -11,7 +11,7 @@ set(Python_USE_STATIC_LIBS OFF)
 
 find_package(Python 3.13 EXACT COMPONENTS Interpreter Development REQUIRED)
 find_package(pybind11 CONFIG REQUIRED)
-find_package(OpenMP REQUIRED)
+find_package(OpenMP)
 
 add_subdirectory(CPP/TFM)
 

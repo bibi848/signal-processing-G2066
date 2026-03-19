@@ -42,21 +42,20 @@ from engine.microstructure import generate_grain_structure, embed_geometric_defe
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from Classes.Filter import filter_signal
 from Classes.TFM1D import CTFM1D
-
 from scipy.signal import hilbert
+import platform
 
 # TFM Hardware Parameters
-program_language = 'gpu'    # cpp or python or gpu
-operating_sys    = 'ubuntu' # windows or mac or ubuntu
+program_language = 'gpu' # cpp or python or gpu
 
 if program_language == 'cpp':
-    if operating_sys == 'windows':
+    if platform.system() == 'Windows':
         build_dir = os.path.join(
             os.path.dirname(__file__),
             "..",
             "build", "CPP", "TFM", "Debug"
         )
-    elif operating_sys == 'ubuntu':
+    else:  # Linux or macOS
         build_dir = os.path.join(
             os.path.dirname(__file__),
             "..",

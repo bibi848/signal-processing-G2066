@@ -1,0 +1,52 @@
+Using C++ and Pybind11 on Mac
+
+This file takes you through the process for installing a C++ compiler, Pybind11 and CMake for using the custom
+TFM code written in C++. On Linux and Windows, the parallel processing library for CPU being used is OpenMP. This is not directly
+available on MacOS. 
+
+Packages Installed:
+- Xcode: Provides clang, the MacOS C++ compiler.
+- Homebrew: MacOS package manager.
+- CMake: Build system that configures and compiles the C++ code. 
+- libomp: OpenMP runtime for clang, which will enable the multi-threaded TFM. 
+- Pybind11: Links the C++ code to Python. 
+
+Instructions:
+
+Step 1: Install Xcode.
+Open the terminal and run:
+
+    xcode-select --install
+
+A pop-up window should appear. Click "install". 
+
+Step 2: Install Homebrew.
+Homebreak is a standard package manager on MacOS. You can skip this step if you already have it. Otherwise, run the following:
+
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+Ensure that Homebrew is added to your PATH.
+
+Step 3: Install CMake and libomp.
+
+    brew install cmake
+    brew install libomp
+
+Step 4: Install Pybind11.
+
+    pip3.13 install pybind11
+
+Step 5: Build the C++ Module.
+
+    mkdir -p build
+    cd build
+    cmake .. -DCMAKE_BUILD_TYPE=Release
+    cmake --build . --config Release -- -j$(sysctl -n hw.logicalcpu)
+
+We should see a line something like "OpenMP found - multi-threading enabled".
+The build will produce a file called tfm_cpp.cpython-313-darwin.so inside build/CPP/TFM/
+
+Step 6: Verification.
+Test the import via
+
+    python3.13 -c "import sys; sys.path.insert(0, 'build/CPP/TFM'); import tfm_cpp; print('OK')"
