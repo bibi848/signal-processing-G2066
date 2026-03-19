@@ -93,6 +93,33 @@ def db_to_linear(bscans_db: np.ndarray) -> np.ndarray:
     return np.float32(10.0 ** (bscans_db / 20.0))
 
 
+# ── Lateral taper ────────────────────────────────────────────────────
+
+def _apply_lateral_taper(
+    bscans: np.ndarray,
+    taper_fraction: float = 0.1,
+) -> np.ndarray:
+    """
+    Apply a Tukey (tapered cosine) window along the lateral axis
+    of each B-scan so values decay smoothly to zero at the edges.
+
+    This prevents the hard lateral boundary from creating bright-edge
+    artifacts in the FBP reconstruction.
+
+    Args:
+        bscans:         (n_scans, n_z, n_lateral)
+        taper_fraction: Fraction of each edge that is tapered (0-0.5).
+
+    Returns:
+        Tapered copy, same shape.
+    """
+    from scipy.signal.windows import tukey
+    n_lateral = bscans.shape[2]
+    window = tukey(n_lateral, alpha=2 * taper_fraction).astype(np.float32)
+    # Broadcast: (1, 1, n_lateral) over (n_scans, n_z, n_lateral)
+    return bscans * window[np.newaxis, np.newaxis, :]
+
+
 # ── Build sinograms ──────────────────────────────────────────────────
 
 def build_sinograms(bscans_linear: np.ndarray) -> np.ndarray:
@@ -106,6 +133,31 @@ def build_sinograms(bscans_linear: np.ndarray) -> np.ndarray:
         sinograms: (n_z, n_lateral, n_scans) -- one sinogram per depth row
     """
     return np.transpose(bscans_linear, (1, 2, 0))
+
+
+# ── Angular mean subtraction ─────────────────────────────────────────
+
+def _subtract_angular_mean(sinograms: np.ndarray) -> np.ndarray:
+    """
+    Remove the rotationally invariant component from each sinogram.
+
+    Wall echoes (backwall/frontwall reflections) appear identically at
+    every rotation angle. In the sinogram, this means each detector row
+    has a constant offset across all angles. Subtracting the angular
+    mean removes this DC component, eliminating concentric ring artifacts
+    in the reconstruction while preserving angle-dependent grain structure.
+
+    Args:
+        sinograms: (n_z, n_detectors, n_angles)
+
+    Returns:
+        Sinograms with angular mean subtracted, same shape.
+    """
+    # Mean across angles for each (depth, detector) pair
+    angular_mean = sinograms.mean(axis=2, keepdims=True)
+    result = sinograms - angular_mean
+    # Clip negative values — amplitude should be non-negative
+    return np.maximum(result, 0.0).astype(np.float32)
 
 
 # ── Inverse Radon reconstruction ─────────────────────────────────────
@@ -270,6 +322,40 @@ def _circle_mask(size: int) -> np.ndarray:
     y, x = np.ogrid[:size, :size]
     r_sq = (y - center) ** 2 + (x - center) ** 2
     return r_sq <= (size / 2.0) ** 2
+
+
+def _soft_circle_apodise(volume: np.ndarray, rolloff_fraction: float = 0.05) -> np.ndarray:
+    """
+    Apply a soft circular apodisation to each x-y slice, replacing
+    iradon's hard circular mask with a smooth cosine rolloff.
+
+    This eliminates the bright ring artifact at the circle boundary.
+
+    Args:
+        volume:           (n_z, n_y, n_x)
+        rolloff_fraction: Fraction of radius over which the taper falls to 0.
+
+    Returns:
+        Apodised volume, same shape.
+    """
+    n_z, n_y, n_x = volume.shape
+    center_y = (n_y - 1) / 2.0
+    center_x = (n_x - 1) / 2.0
+    radius = min(n_y, n_x) / 2.0
+
+    y, x = np.ogrid[:n_y, :n_x]
+    r = np.sqrt((y - center_y) ** 2 + (x - center_x) ** 2)
+
+    # Cosine rolloff from (1-rolloff)*radius to radius
+    inner = radius * (1.0 - rolloff_fraction)
+    mask = np.ones((n_y, n_x), dtype=np.float32)
+    transition = (r > inner) & (r <= radius)
+    mask[transition] = (0.5 * (1.0 + np.cos(
+        np.pi * (r[transition] - inner) / (radius - inner)
+    ))).astype(np.float32)
+    mask[r > radius] = 0.0
+
+    return volume * mask[np.newaxis, :, :]
 
 
 def crop_cylinder_to_cube(volume: np.ndarray) -> np.ndarray:
@@ -463,81 +549,94 @@ def view_reconstruction_napari(
 
 # ── Static comparison figure ─────────────────────────────────────────
 
-def save_comparison_figure(
+def save_reconstruction_summary(
     recon: np.ndarray,
-    ground_truth: Optional[np.ndarray],
-    metrics: Optional[dict],
+    bscans_db: np.ndarray,
+    sinograms: np.ndarray,
+    meta: dict,
     output_path: str,
 ) -> None:
-    """Save a matplotlib comparison figure to disk."""
-    n_z = recon.shape[0]
-    has_gt = ground_truth is not None
+    """
+    Save a reconstruction summary figure showing cross-sections,
+    example B-scans, and sinogram diagnostics.
 
-    n_rows = 3 if has_gt else 1
-    fig, axes = plt.subplots(n_rows, 3, figsize=(14, 4 * n_rows))
-    if n_rows == 1:
-        axes = axes[np.newaxis, :]
+    Args:
+        recon:      (n_z, n_y, n_x) reconstructed volume
+        bscans_db:  (n_scans, n_z, n_lateral) B-scans in dB
+        sinograms:  (n_z, n_detectors, n_angles) sinogram stack
+        meta:       scan metadata dict
+        output_path: where to save the PNG
+    """
+    n_z, n_y, n_x = recon.shape
+    n_scans = bscans_db.shape[0]
+    angles = meta.get('angles_rad', np.linspace(-np.pi/2, np.pi/2, n_scans))
 
-    fractions = [0.25, 0.50, 0.75]
+    fig, axes = plt.subplots(3, 3, figsize=(14, 12))
     r_vmax = np.percentile(recon[recon > 0], 99) if recon.max() > 0 else 1.0
 
+    # ── Row 1: Reconstruction cross-sections at 25%, 50%, 75% depth ──
+    fractions = [0.25, 0.50, 0.75]
     for i, frac in enumerate(fractions):
-        z_idx = int(frac * n_z)
-        z_idx = min(z_idx, n_z - 1)
-
+        z_idx = min(int(frac * n_z), n_z - 1)
         axes[0, i].imshow(recon[z_idx], cmap='hot', vmin=0, vmax=r_vmax,
-                          origin='lower')
-        axes[0, i].set_title(f'Reconstruction  z={z_idx}/{n_z}')
+                          origin='lower', aspect='equal')
+        axes[0, i].set_title(f'Depth slice z={z_idx}/{n_z} ({frac:.0%})')
         axes[0, i].axis('off')
 
-        if has_gt:
-            g_vmax = np.percentile(ground_truth[ground_truth > 0], 99) \
-                if ground_truth.max() > 0 else 1.0
-            axes[1, i].imshow(ground_truth[z_idx], cmap='hot', vmin=0,
-                              vmax=g_vmax, origin='lower')
-            axes[1, i].set_title(f'Ground truth  z={z_idx}/{n_z}')
-            axes[1, i].axis('off')
+    # ── Row 2: B-scans at 3 rotation angles ──
+    bscan_indices = [0, n_scans // 2, n_scans - 1]
+    b_vmin = np.percentile(bscans_db, 5)
+    b_vmax = np.percentile(bscans_db, 99)
+    for i, idx in enumerate(bscan_indices):
+        angle_deg = np.degrees(angles[idx])
+        axes[1, i].imshow(bscans_db[idx], cmap='hot', vmin=b_vmin, vmax=b_vmax,
+                          origin='lower', aspect='auto')
+        axes[1, i].set_title(f'B-scan #{idx} ({angle_deg:+.0f}\u00b0)')
+        axes[1, i].set_xlabel('Lateral (px)')
+        axes[1, i].set_ylabel('Depth (px)')
 
-    if has_gt and metrics is not None:
-        # SSIM per slice plot
-        axes[2, 0].plot(metrics['ssim_per_slice'], 'b-', linewidth=1)
-        axes[2, 0].set_xlabel('Depth slice')
-        axes[2, 0].set_ylabel('SSIM')
-        axes[2, 0].set_title(f'SSIM per slice (mean={metrics["ssim_mean"]:.3f})')
-        axes[2, 0].set_ylim([-0.1, 1.05])
-        axes[2, 0].grid(True, alpha=0.3)
+    # ── Row 3: Sinogram at mid-depth + amplitude profile + stats ──
+    mid_z = n_z // 2
+    sino_slice = sinograms[mid_z]  # (n_detectors, n_angles)
+    s_vmax = np.percentile(sino_slice, 99) if sino_slice.max() > 0 else 1.0
+    axes[2, 0].imshow(sino_slice, cmap='hot', vmin=0, vmax=s_vmax,
+                      origin='lower', aspect='auto')
+    axes[2, 0].set_title(f'Sinogram at z={mid_z}')
+    axes[2, 0].set_xlabel('Angle index')
+    axes[2, 0].set_ylabel('Detector (px)')
 
-        # Metrics text
-        axes[2, 1].axis('off')
-        text_lines = [
-            f'SSIM (mean):  {metrics["ssim_mean"]:.4f}',
-            f'NRMSE:        {metrics["nrmse"]:.4f}',
-            f'Pearson r:    {metrics["pearson_r"]:.4f}',
-            f'CNR (recon):  {metrics["cnr_recon"]:.2f}',
-            f'CNR (GT):     {metrics["cnr_gt"]:.2f}',
-            f'Defect err:   {metrics["defect_centroid_error_mm"]:.2f} mm',
-        ]
-        axes[2, 1].text(0.1, 0.5, '\n'.join(text_lines),
-                        transform=axes[2, 1].transAxes,
-                        fontsize=11, family='monospace',
-                        verticalalignment='center')
-        axes[2, 1].set_title('Quantitative Metrics')
+    # Mean amplitude per depth slice
+    mean_per_z = np.mean(recon, axis=(1, 2))
+    axes[2, 1].plot(mean_per_z, 'b-', linewidth=1)
+    axes[2, 1].set_xlabel('Depth slice')
+    axes[2, 1].set_ylabel('Mean amplitude')
+    axes[2, 1].set_title('Signal vs depth')
+    axes[2, 1].grid(True, alpha=0.3)
 
-        # Difference at mid-depth
-        mid = n_z // 2
-        r_max = recon.max() if recon.max() > 0 else 1.0
-        g_max = ground_truth.max() if ground_truth.max() > 0 else 1.0
-        diff = np.abs(recon[mid] / r_max - ground_truth[mid] / g_max)
-        axes[2, 2].imshow(diff, cmap='turbo', vmin=0, vmax=0.5, origin='lower')
-        axes[2, 2].set_title(f'|Difference| at z={mid}')
-        axes[2, 2].axis('off')
-    elif not has_gt:
-        pass  # only reconstruction rows shown
+    # Stats text
+    axes[2, 2].axis('off')
+    dynamic_range = 20 * np.log10(recon.max() / (recon[recon > 0].min() + 1e-30)) \
+        if recon.max() > 0 else 0
+    stats = [
+        f'Volume shape:     {recon.shape}',
+        f'N scans:          {n_scans}',
+        f'Angular range:    {np.degrees(angles[0]):+.0f}\u00b0 to '
+        f'{np.degrees(angles[-1]):+.0f}\u00b0',
+        f'Mean amplitude:   {recon.mean():.4f}',
+        f'Max amplitude:    {recon.max():.4f}',
+        f'Dynamic range:    {dynamic_range:.1f} dB',
+        f'Non-zero voxels:  {(recon > 0).sum() / recon.size:.1%}',
+    ]
+    axes[2, 2].text(0.05, 0.5, '\n'.join(stats),
+                    transform=axes[2, 2].transAxes,
+                    fontsize=10, family='monospace',
+                    verticalalignment='center')
+    axes[2, 2].set_title('Reconstruction stats')
 
     plt.tight_layout()
     fig.savefig(output_path, dpi=200, bbox_inches='tight')
     plt.close(fig)
-    print(f"Comparison figure saved: {output_path}")
+    print(f"Reconstruction summary saved: {output_path}")
 
 
 # ── Top-level pipeline ───────────────────────────────────────────────
@@ -581,14 +680,16 @@ def reconstruct_and_compare(
     # 1. Load B-scans
     bscans_db, meta = load_bscans(scan_dir)
 
-    # 2. Convert to linear and re-normalise globally
+    # 2. Convert to linear, taper lateral edges, re-normalise globally
     bscans_lin = db_to_linear(bscans_db)
+    bscans_lin = _apply_lateral_taper(bscans_lin, taper_fraction=0.1)
     global_max = bscans_lin.max()
     if global_max > 0:
         bscans_lin /= global_max
 
-    # 3. Build sinograms
+    # 3. Build sinograms and remove rotationally invariant component (wall echoes)
     sinograms = build_sinograms(bscans_lin)
+    sinograms = _subtract_angular_mean(sinograms)
 
     # 4. Convert angles to degrees
     angles_deg = np.degrees(meta['angles_rad'])
@@ -601,7 +702,8 @@ def reconstruct_and_compare(
         filter_name=filter_name, circle=circle, output_size=output_size,
     )
 
-    # 5b. Optionally crop cylinder to inscribed cube
+    # 5b. Soft circular apodisation to remove ring artifact, then crop
+    volume_recon = _soft_circle_apodise(volume_recon, rolloff_fraction=0.08)
     if crop_to_cube:
         volume_recon = crop_cylinder_to_cube(volume_recon)
         print(f"  Cropped to cube: {volume_recon.shape}")
@@ -654,11 +756,12 @@ def reconstruct_and_compare(
         print(f"  Defect centroid err: {metrics['defect_centroid_error_mm']:.2f} mm")
         print(f"{'='*50}\n")
 
-    # 7. Save comparison figure
+    # 7. Save reconstruction summary figure
     if save_figures:
-        fig_path = os.path.join(output_dir, 'reconstruction_comparison.png')
-        save_comparison_figure(volume_recon, gt_contrast, metrics or None,
-                               fig_path)
+        fig_path = os.path.join(output_dir, 'reconstruction_summary.png')
+        save_reconstruction_summary(
+            volume_recon, bscans_db, sinograms, meta, fig_path,
+        )
 
     # 8. Napari viewer
     if show_napari:
