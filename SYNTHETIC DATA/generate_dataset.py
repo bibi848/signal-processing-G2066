@@ -339,6 +339,7 @@ def generate_dataset(
     element_pitch: float = 0.6e-3,
     frequency: float = 10e6,
     bandwidth: float = 0.6,
+    snr_db: float = 35.0,
     # Scan plan
     n_scans: int = 32,
     theta_start: float = -np.pi / 2,
@@ -358,6 +359,7 @@ def generate_dataset(
     # Output
     output_root: Optional[str] = None,
     save_full_volume: bool = False,
+    show_napari: bool = True,
 ) -> str:
     """
     Generate a multi-position synthetic scan dataset.
@@ -455,6 +457,7 @@ def generate_dataset(
         max_bounces=2,
         mode_conversion=True,
     )
+    cfg.acquisition.snr_db = snr_db
     specimen_local = Specimen3D(
         thickness=thickness, width=local_width, depth=local_depth,
     )
@@ -578,8 +581,8 @@ def generate_dataset(
     print(f"  Output: {output_root}")
     print(f"{'#'*60}\n")
 
-    # 8. Visualise all volumes in napari
-    if mode == '3d':
+    # 8. Visualise all volumes in napari (skipped during sweeps)
+    if mode == '3d' and show_napari:
         view_dataset_napari(output_root, layer='both')
 
     return output_root
