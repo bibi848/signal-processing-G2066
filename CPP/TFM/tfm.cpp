@@ -1,6 +1,9 @@
 #include "tfm.h"
 #include <cmath>
+
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 
 void tfm1D(
     const double* time_data,

@@ -7,6 +7,7 @@ This script converts the files processed previously into TFM images.
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import platform
 import os
 import sys
 import time
@@ -25,12 +26,11 @@ cwd                  = os.getcwd()
 
 display_picture = False
 save_picture    = True
-all_pictures    = True
+all_pictures    = False
 filtered_data   = True
 angular_filter  = False
 
 engine  = 'gpu' # python/cpp/gpu
-osys    = 'ubuntu' # windows/ubuntu, choose windows if on mac
 threads = 512
 
 # Threshold Parameters
@@ -85,12 +85,12 @@ print()
 
 # Import module
 if engine == 'cpp':
-    if osys == 'windows':
+    if platform.system() == 'Windows':
         build_dir = os.path.join(
             os.path.dirname(__file__),
             "build", "CPP", "TFM", "Debug"
         )
-    elif osys == 'ubuntu':
+    else:
         build_dir = os.path.join(
             os.path.dirname(__file__),
             "build", "CPP", "TFM"
