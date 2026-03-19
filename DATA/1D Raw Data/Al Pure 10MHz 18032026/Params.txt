@@ -1,0 +1,26 @@
+This data is for a rotation experiment conducted with a pure sample of aluminium. 
+The rig is not good, hence the data may also be utterly worthless. A future experiment will 
+include a much better experimental setup. 
+The experiment takes 3 images for speed of sound calculations.
+Then full images are taken of the block until it spins 180 degrees. 
+The block is moved 5mm along its longest axis and the experiment is repeated. 
+
+The depth of the block is 50mm
+The block is moved 5mm parallel to the first scan.
+Array always spun anticlockwise with respect to the material.
+
+Speed of sound measurements:
+Imasonic 1D 64els 5.00MHz 0.63mm pitch
+FMC
+Sample Frequency: 25MHz
+Time Points: 1200
+Gain: 40dB
+Averages: 64
+
+Rotation Measurements:
+Imasonic 1D 128els 10MHz 0.30mm pitch
+FMC
+Sample Frequency: 50MHz
+Time Points: 1200
+Gain: 70dB
+Averages: 64
