@@ -46,7 +46,7 @@ from scipy.signal import hilbert
 import platform
 
 # TFM Hardware Parameters
-program_language = 'gpu' # cpp or python or gpu
+program_language = 'cpp' # cpp or python or gpu
 
 if program_language == 'cpp':
     if platform.system() == 'Windows':
