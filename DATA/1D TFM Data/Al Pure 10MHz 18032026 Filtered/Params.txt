@@ -1,0 +1,13 @@
+# Threshold Parameters
+vmax = 0.0
+vmin = -20.0
+
+# Image Parameters
+c        = 5949.40 # m/s
+z_max    = 10e-3   # m
+z_min    = 40e-3   # m
+x_min    = 'xc_min' # m, can specify length
+x_max    = 'xc_max' # or just use xc_min/xc_max
+x_pixels = 800
+z_pixels = 700
+cmap     = 'grey'
