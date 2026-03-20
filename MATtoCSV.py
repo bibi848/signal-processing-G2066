@@ -23,15 +23,15 @@ def remove_spikes(signal, threshold=500, verbose=False):
 
 # Point the script to the correct subfolder.
 raw_data_type       = '1D Raw Data'
-raw_data_name       = 'Cu Pure 15MHz 17022026'
+raw_data_name       = 'Al Pure 10MHz 18032026'
 processed_data_type = '1D Processed Data'
 cwd                 = os.getcwd()
-display_picture     = False
+display_picture     = True
 save_picture        = False
 all_pictures        = True
 filter_data         = True
 crop_data           = True
-crop_amount         = 1200
+crop_amount         = 900
 
 # Filtering Parameters
 filter_alpha   = 1.0
@@ -97,6 +97,11 @@ for file in mat_files:
         time = np.array(f["exp_data/time"])[0]
         time_data = np.array(f["exp_data/time_data"])
 
+    if crop_data:
+        print('Cropping Data')
+        time_data = time_data[:, :crop_amount]
+        time      = time[:crop_amount]
+
     # Metadata
     metadata_df = pd.DataFrame({
         "Field": [
@@ -116,10 +121,6 @@ for file in mat_files:
             time_data.shape[1]
         ]
     })
-
-    if crop_data:
-        time_data = time_data[:, :crop_amount]
-        time      = time[:crop_amount]
 
     # Removing Extreme Spikes
     time_data = np.apply_along_axis(remove_spikes, 
@@ -174,7 +175,7 @@ for file in mat_files:
 
         # Compressing
         print('Compressing Signals')
-        time_data = time_data = time_data.astype(np.float32)
+        time_data = time_data.astype(np.float32)
 
     # Write CSV file
     print("Writing CSV files")
@@ -213,7 +214,7 @@ for file in mat_files:
             chunks=(1, time_data.shape[1])
         )
     
-        # Metadata as attributes
+        # Metadata
         dset.attrs["centre_frequency_Hz"] = centre_freq
         dset.attrs["dt"] = time[1] - time[0]
         dset.attrs["filtered"] = filter_data

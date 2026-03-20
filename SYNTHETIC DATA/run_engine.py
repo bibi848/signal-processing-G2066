@@ -27,11 +27,6 @@ import sys
 import os
 import time
 
-# Add parent directory for Classes/
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from Classes.Filter import filter_signal
-from Classes.TFM1D import CTFM1D
-
 from engine.config import (
     SimulationConfig, SpecimenConfig, ArrayConfig, ScanPlanConfig,
 )
@@ -42,6 +37,43 @@ from engine.fmc_engine import FMCEngine
 from engine.materials import ALUMINUM, STEEL_MILD, STEEL_STAINLESS, WATER, NDT_GEL
 from engine.voxel_volume import VoxelVolume3D
 from engine.microstructure import generate_grain_structure, embed_geometric_defects
+
+# External Functions (OD)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from Classes.Filter import filter_signal
+from Classes.TFM1D import CTFM1D
+from scipy.signal import hilbert
+import platform
+
+# TFM Hardware Parameters
+program_language = 'cpp' # cpp or python or gpu
+
+if program_language == 'cpp':
+    if platform.system() == 'Windows':
+        build_dir = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "build", "CPP", "TFM", "Debug"
+        )
+    else:  # Linux or macOS
+        build_dir = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "build", "CPP", "TFM"
+        )
+    sys.path.insert(0, build_dir)
+    import tfm_cpp
+    print('CPP Available')
+
+elif program_language == 'gpu':
+    build_dir = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "build", "CPP", "TFM_GPU"
+    )
+    sys.path.insert(0, build_dir)
+    import tfm_gpu
+    print('GPU Available')
 
 
 def add_noise(fmc_data: np.ndarray, snr_db: float = 35.0,
@@ -150,11 +182,36 @@ def reconstruct_tfm(fmc_data: np.ndarray, time_axis: np.ndarray,
     x_img = np.linspace(x_range[0], x_range[1], n_pixels)
     z_img = np.linspace(z_range[0], z_range[1], n_pixels)
 
-    print(f"  TFM reconstruction: {n_pixels}×{n_pixels} pixels...")
+    print(f"TFM Process Starting for {n_pixels} x {n_pixels}...")
     t0 = time.time()
-    img_db = CTFM1D(fmc_flat, time_axis, tx_arr, rx_arr, xc, zc, c, x_img, z_img,
-                     output_db=True)
-    print(f"  TFM complete: {time.time() - t0:.1f}s")
+
+    if program_language == 'cpp':
+        tx0 = tx_arr - 1
+        rx0 = rx_arr - 1
+        X, Z = np.meshgrid(x_img, z_img)
+        img = tfm_cpp.tfm1D(fmc_flat, time_axis, tx0, rx0, xc, zc, X, Z, c)
+
+        img_analytic = hilbert(img, axis=0)
+        img          = np.abs(img_analytic)
+        img_max      = np.max(img)
+        img_db       = 20 * np.log10(img / img_max + 1e-10)
+
+    elif program_language == 'gpu':
+        tx0 = tx_arr - 1
+        rx0 = rx_arr - 1
+        X, Z = np.meshgrid(x_img, z_img)
+
+        img = tfm_gpu.tfm1D_GPU(fmc_flat, time_axis, tx0, rx0, xc, zc, X, Z, c, 512)
+
+        img_analytic = hilbert(img, axis=0)
+        img          = np.abs(img_analytic)
+        img_max      = np.max(img)
+        img_db       = 20 * np.log10(img / img_max + 1e-10)      
+
+    else:
+        img_db = CTFM1D(fmc_flat, time_axis, tx_arr, rx_arr, xc, zc, c, x_img, z_img, output_db=True)
+
+    print(f"TFM Time: {time.time() - t0:.3f}s")
 
     return img_db, x_img, z_img
 
