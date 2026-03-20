@@ -258,46 +258,79 @@ def run_scan(
 
 # ── Main ─────────────────────────────────────────────────────────────
 
-def main():
-    """Run a simulation matching the experimental Al 10 MHz setup."""
+def main(no_defects: bool = False):
+    """
+    Single-scan test matched to Al Hole 15MHz 26012026 experiment.
+
+    Real experiment parameters (from DATA/ Params.txt):
+      Array:  Imasonic 1D 64 elements, 0.63 mm pitch, 15 MHz
+      TFM:    c=6700 m/s, z=0..40 mm, 400×600 pixels, vmin=-5 dB
+      Filter: alpha=0.2, bandwidth=0.2% (MHz_percentage=0.1), hanning=True
+      Sample: 40 mm thick aluminium block with a cylindrical hole (SDH)
+
+    Args:
+        no_defects: If True, run grain-only (no defects) for comparison.
+    """
+    label = "grain only" if no_defects else "with SDH defect"
     print(f"\n{'#'*70}")
-    print(f"# PHYSICS-ACCURATE 3D NDT SYNTHETIC DATA ENGINE")
+    print(f"# TEST SCAN — Al Hole 15MHz ({label})")
     print(f"{'#'*70}\n")
 
-    # Specimen: 70 mm thick aluminium block (wider than array aperture)
-    # Array aperture = 127 × 0.3 mm = 38.1 mm → specimen width 50 mm gives margin
+    frequency = 15e6
+    thickness = 40e-3  # 40 mm Al block
+
+    # Specimen: aperture = 63 × 0.63 mm ≈ 39.7 mm → width 50 mm gives margin
     specimen = build_specimen(
-        thickness=70e-3,   # 70 mm deep
-        width=50e-3,       # 50 mm wide (array aperture = 38.1 mm fits inside)
-        depth=30e-3,       # 30 mm elevation (rotational scan axis)
+        thickness=thickness,
+        width=50e-3,
+        depth=30e-3,
     )
-    defects_3d = build_defects(specimen)
 
-    frequency = 10e6  # 10 MHz — matches experimental array
+    # Cylindrical hole (SDH) at centre, running full y-depth
+    if no_defects:
+        defects_3d = []
+    else:
+        defects_3d = [
+            CylindricalDefect(
+                center_z=20e-3, center_x=0.0, radius=1e-3,
+                y_start=-specimen.depth / 2, y_end=specimen.depth / 2,
+            ),
+        ]
 
-    # Grain volume with embedded defects
+    # Grain volume (with or without embedded defect)
     voxel_volume = build_grain_volume(
         specimen,
         defects_3d=defects_3d,
         frequency=frequency,
+        mean_grain_size_m=0.5e-3,
+        impedance_variation=0.025,
     )
 
-    # 128-element, 0.3 mm pitch array — matches experimental hardware
+    # Config — matched to real hardware
     cfg, scan_plan = build_config(
         specimen,
         frequency=frequency,
         num_elements=128,
         element_pitch=0.3e-3,
+        bandwidth=0.002,         # 0.2% (MHz_percentage=0.1 → ±0.1%)
+        n_scans=32,
     )
+    # Filter params from real experiment
+    cfg.acquisition.filter_alpha = 0.2
+    cfg.acquisition.hanning_bool = True
+    cfg.acquisition.snr_db = 35.0
 
-    # TFM z_range: 10–65 mm (skip near-surface, stop before 70 mm back wall)
-    # x_range is automatically clipped to array aperture (±19.05 mm)
+    suffix = 'no_defects' if no_defects else 'with_defect'
+    out = os.path.join(os.path.dirname(__file__), 'output', f'scan_3d_{suffix}')
+
     output_dir = run_scan(
         specimen, defects_3d, cfg, scan_plan,
+        output_dir=out,
         voxel_volume=voxel_volume,
         use_voxel_world=True,
-        tfm_z_start=10e-3,
-        tfm_z_end=65e-3,
+        tfm_z_start=0e-3,       # real data images from z=0
+        tfm_z_end=thickness,     # to z=40 mm
+        tfm_n_pixels=400,
     )
 
     # Save ground truth for reconstruction comparison
@@ -314,4 +347,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description='Single-scan test (Al Hole 15MHz)')
+    parser.add_argument('--no-defects', action='store_true',
+                        help='Run grain-only scan (no defects) for comparison')
+    args = parser.parse_args()
+    main(no_defects=args.no_defects)

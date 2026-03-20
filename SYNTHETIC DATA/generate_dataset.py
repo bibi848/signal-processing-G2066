@@ -340,6 +340,8 @@ def generate_dataset(
     frequency: float = 10e6,
     bandwidth: float = 0.6,
     snr_db: float = 35.0,
+    filter_alpha: float = 1.0,
+    hanning_bool: bool = False,
     # Scan plan
     n_scans: int = 32,
     theta_start: float = -np.pi / 2,
@@ -458,6 +460,8 @@ def generate_dataset(
         mode_conversion=True,
     )
     cfg.acquisition.snr_db = snr_db
+    cfg.acquisition.filter_alpha = filter_alpha
+    cfg.acquisition.hanning_bool = hanning_bool
     specimen_local = Specimen3D(
         thickness=thickness, width=local_width, depth=local_depth,
     )
@@ -478,6 +482,9 @@ def generate_dataset(
             'frequency_Hz': frequency,
             'bandwidth': bandwidth,
             'aperture_m': aperture,
+            'filter_alpha': filter_alpha,
+            'hanning_bool': hanning_bool,
+            'snr_db': snr_db,
         },
         'scan_grid': {
             **grid_info,

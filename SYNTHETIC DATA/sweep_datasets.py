@@ -324,11 +324,13 @@ def sweep_datasets(
 #     voxel_fraction       frac   voxel size as fraction of wavelength (e.g. 1/3)
 #     seed                 int    RNG seed for grain structure reproducibility
 #
-#   ARRAY
+#   ARRAY & FILTERING
 #     num_elements         int    e.g. 32, 64, 128
 #     element_pitch        (m)    e.g. 0.3e-3, 0.6e-3, 1.0e-3
 #     frequency            (Hz)   e.g. 5e6, 10e6, 15e6
-#     bandwidth            frac   e.g. 0.4, 0.6, 0.8
+#     bandwidth            frac   e.g. 0.03, 0.6, 0.9  (real data: 0.03–0.9)
+#     filter_alpha         frac   Tukey taper (0=rect, 1=Hann). Real data: 0.2–1.0
+#     hanning_bool         bool   Pre-window with Hanning. Real data: True for Al Hole
 #     snr_db               (dB)   e.g. 20, 30, 40
 #
 #   SCAN PLAN
@@ -354,33 +356,55 @@ def sweep_datasets(
 # ── Main ──────────────────────────────────────────────────────────────
 
 def main():
-    """Example sweep: vary grain size, impedance variation, and overlap."""
-    sweep_datasets(
-        show_napari=True,  # Set True to open napari after each run (blocks)
-        n_realisations=3,  # 3 different grain structures per combo
-        sweep_params={
-            # Material / grain structure
-            'mean_grain_size_m': [0.5e-3, 1.0e-3],
-            'impedance_variation': [0.025, 0.05],
-            # Stitching
+    """
+    Sweep matched to real experimental parameters.
 
+    Real data configurations (from DATA/ Params.txt files):
+      Al Pure 10MHz:  c=6700, 64 els, 0.63mm pitch, BW~3%, alpha=1.0
+      Al Pure 15MHz:  c=6700, 128 els, 0.21mm pitch, BW~3%, alpha=1.0
+      Al Hole 5MHz:   c=6700, 64 els, 0.63mm pitch, BW~0.2%, alpha=0.2, hanning=True
+      Cu Pure 10MHz:  c=4700, 64 els, 0.63mm pitch, BW~3%, alpha=1.0
+      Cu Pure 7.5MHz: c=4700, 128 els, 0.77mm pitch, BW~0.8%, alpha=1.0
+
+    We sweep over the parameters that most affect stitching performance:
+      - bandwidth (narrow vs wide filtering)
+      - grain size (scattering regime)
+      - overlap fraction
+    with multiple grain realisations per combo for statistical confidence.
+    """
+    sweep_datasets(
+        show_napari=False,
+        n_realisations=3,
+
+        sweep_params={
+            # Filtering — match real experimental range
+            'bandwidth': [0.03, 0.9],       # 3% (standard filtered) vs 90% (wideband)
+            # Grain structure — controls scattering strength
+            'mean_grain_size_m': [0.5e-3, 1.0e-3],
+            # Stitching overlap
+            'overlap_fraction': [0.3, 0.5],
         },
+        
         base_params={
-            # Specimen
+            # Specimen (matches Al Pure experiment geometry)
             'width_total': 100e-3,
             'depth_total': 60e-3,
             'thickness': 50e-3,
             # Material
             'material': 'ALUMINUM',
-            # Array
-            'num_elements': 128,
-            'element_pitch': 0.3e-3,
+            # Array — matches Imasonic 1D 64els 5MHz 0.63mm pitch
+            'num_elements': 64,
+            'element_pitch': 0.63e-3,
             'frequency': 10e6,
             'snr_db': 35.0,
+            # Filtering — real data defaults
+            'filter_alpha': 1.0,
+            'hanning_bool': False,
+            # Grain structure
+            'impedance_variation': 0.025,
             # Scan
             'n_positions_x': 2,
             'n_positions_y': 0,
-            'overlap_fraction': 0.5,
             'n_scans': 32,
             'mode': '3d',
             'tfm_z_start': 10e-3,
