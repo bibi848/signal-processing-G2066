@@ -398,41 +398,42 @@ def main():
     """
     sweep_datasets(
         show_napari=False,
-        n_realisations=3,
+        # Multiple grain realisations per parameter combo to test
+        # stitching robustness across different microstructures
+        n_realisations=5,
 
         sweep_params={
-            # Filtering — match real experimental range
-            'bandwidth': [0.03, 0.9],       # 3% (standard filtered) vs 90% (wideband)
-            # Grain structure — controls scattering strength
-            'mean_grain_size_m': [0.5e-3, 1.0e-3],
-            # Stitching overlap
-            'overlap_fraction': [0.3, 0.5],
+            # Stitching overlap — primary variable for robustness study
+            'overlap_fraction': [0.2, 0.3, 0.5],
         },
-        
+
+        # Base params aligned with run_engine.py defaults
         base_params={
-            # Specimen (matches Al Pure experiment geometry)
+            # Specimen
             'width_total': 100e-3,
             'depth_total': 60e-3,
             'thickness': 50e-3,
             # Material
             'material': 'ALUMINUM',
-            # Array — matches Imasonic 1D 64els 5MHz 0.63mm pitch
+            # Array — matches run_engine.py defaults
             'num_elements': 64,
-            'element_pitch': 0.63e-3,
+            'element_pitch': 0.6e-3,
             'frequency': 10e6,
+            'bandwidth': 0.6,
             'snr_db': 35.0,
-            # Filtering — real data defaults
+            # Filtering
             'filter_alpha': 1.0,
             'hanning_bool': False,
             # Grain structure
             'impedance_variation': 0.025,
+            'mean_grain_size_m': 0.5e-3,
             # Scan
             'n_positions_x': 2,
             'n_positions_y': 0,
             'n_scans': 32,
             'mode': '3d',
             'tfm_z_start': 10e-3,
-            'tfm_n_pixels': 400,
+            'tfm_n_pixels': 800,
             'save_full_volume': True,
         },
     )
