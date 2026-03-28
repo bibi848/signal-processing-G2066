@@ -337,21 +337,32 @@ def generate_dataset(
     # Array
     num_elements: int = 64,
     element_pitch: float = 0.6e-3,
+    element_width: Optional[float] = None,
     frequency: float = 10e6,
     bandwidth: float = 0.6,
+    # FMC acquisition
     snr_db: float = 35.0,
+    add_noise: bool = True,
+    grain_noise_level: float = 0.05,
+    time_samples: int = 2048,
+    sampling_frequency: Optional[float] = None,
+    # Filtering
     filter_alpha: float = 1.0,
     hanning_bool: bool = False,
     # Scan plan
     n_scans: int = 32,
     theta_start: float = -np.pi / 2,
     theta_end: float = np.pi / 2,
+    # Physics
+    max_bounces: int = 2,
+    mode_conversion: bool = True,
     # Mode
     mode: str = '3d',
-    # TFM
+    # TFM reconstruction
     tfm_z_start: float = 10e-3,
     tfm_z_end: Optional[float] = None,
     tfm_n_pixels: int = 800,
+    tfm_db_range: float = -40.0,
     # Grain structure
     mean_grain_size_m: float = 0.5e-3,
     impedance_variation: float = 0.025,
@@ -447,21 +458,34 @@ def generate_dataset(
         theta_start=theta_start,
         theta_end=theta_end,
     )
+    array_cfg = ArrayConfig(
+        num_elements=num_elements,
+        element_pitch=element_pitch,
+        frequency=frequency,
+        bandwidth=bandwidth,
+    )
+    if element_width is not None:
+        array_cfg.element_width = element_width
+
     cfg = SimulationConfig(
         specimen=SpecimenConfig(thickness=thickness, width=local_width),
-        array=ArrayConfig(
-            num_elements=num_elements,
-            element_pitch=element_pitch,
-            frequency=frequency,
-            bandwidth=bandwidth,
-        ),
+        array=array_cfg,
         scan_plan=scan_plan,
-        max_bounces=2,
-        mode_conversion=True,
+        max_bounces=max_bounces,
+        mode_conversion=mode_conversion,
     )
+    # FMC acquisition
     cfg.acquisition.snr_db = snr_db
+    cfg.acquisition.add_noise = add_noise
+    cfg.acquisition.grain_noise_level = grain_noise_level
+    cfg.acquisition.time_samples = time_samples
+    if sampling_frequency is not None:
+        cfg.acquisition.sampling_frequency = sampling_frequency
+    # Filtering
     cfg.acquisition.filter_alpha = filter_alpha
     cfg.acquisition.hanning_bool = hanning_bool
+    # TFM
+    cfg.reconstruction.db_range = tfm_db_range
     specimen_local = Specimen3D(
         thickness=thickness, width=local_width, depth=local_depth,
     )
@@ -479,12 +503,23 @@ def generate_dataset(
         'array': {
             'num_elements': num_elements,
             'element_pitch_m': element_pitch,
+            'element_width_m': element_width or array_cfg.element_width,
             'frequency_Hz': frequency,
             'bandwidth': bandwidth,
             'aperture_m': aperture,
+        },
+        'acquisition': {
+            'snr_db': snr_db,
+            'add_noise': add_noise,
+            'grain_noise_level': grain_noise_level,
+            'time_samples': time_samples,
+            'sampling_frequency_Hz': cfg.acquisition.sampling_frequency,
             'filter_alpha': filter_alpha,
             'hanning_bool': hanning_bool,
-            'snr_db': snr_db,
+        },
+        'physics': {
+            'max_bounces': max_bounces,
+            'mode_conversion': mode_conversion,
         },
         'scan_grid': {
             **grid_info,
@@ -502,6 +537,7 @@ def generate_dataset(
             'z_start_m': tfm_z_start,
             'z_end_m': tfm_z_end,
             'n_pixels': tfm_n_pixels,
+            'db_range': tfm_db_range,
         },
         'grain': {
             'mean_grain_size_m': mean_grain_size_m,

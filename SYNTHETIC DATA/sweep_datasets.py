@@ -62,6 +62,16 @@ def _build_run_label(index: int, varied_params: dict) -> str:
         short_key = short_key.replace('num_elements', 'nelem')
         short_key = short_key.replace('frequency', 'freq')
         short_key = short_key.replace('overlap', 'ovlp')
+        short_key = short_key.replace('grain_noise_level', 'gnoise')
+        short_key = short_key.replace('time_samples', 'tsamp')
+        short_key = short_key.replace('sampling', 'fs')
+        short_key = short_key.replace('max_bounces', 'bounces')
+        short_key = short_key.replace('mode_conversion', 'mconv')
+        short_key = short_key.replace('tfm_db_range', 'dbrange')
+        short_key = short_key.replace('tfm_n_pixels', 'tfmpx')
+        short_key = short_key.replace('n_scans', 'nscans')
+        short_key = short_key.replace('filter_alpha', 'alpha')
+        short_key = short_key.replace('snr_db', 'snr')
         if key == 'seed':
             short_key = 'seed'
         if isinstance(val, float):
@@ -324,14 +334,27 @@ def sweep_datasets(
 #     voxel_fraction       frac   voxel size as fraction of wavelength (e.g. 1/3)
 #     seed                 int    RNG seed for grain structure reproducibility
 #
-#   ARRAY & FILTERING
+#   ARRAY
 #     num_elements         int    e.g. 32, 64, 128
 #     element_pitch        (m)    e.g. 0.3e-3, 0.6e-3, 1.0e-3
+#     element_width        (m)    active element width (default: 0.9 × pitch)
 #     frequency            (Hz)   e.g. 5e6, 10e6, 15e6
 #     bandwidth            frac   e.g. 0.03, 0.6, 0.9  (real data: 0.03–0.9)
+#
+#   FMC ACQUISITION
+#     snr_db               (dB)   e.g. 20, 30, 40
+#     add_noise            bool   toggle noise on/off (default True)
+#     grain_noise_level    frac   grain scattering amplitude relative to signal
+#     time_samples         int    number of time samples per A-scan (e.g. 2048)
+#     sampling_frequency   (Hz)   sample rate (default: 4× centre frequency)
+#
+#   FILTERING
 #     filter_alpha         frac   Tukey taper (0=rect, 1=Hann). Real data: 0.2–1.0
 #     hanning_bool         bool   Pre-window with Hanning. Real data: True for Al Hole
-#     snr_db               (dB)   e.g. 20, 30, 40
+#
+#   PHYSICS
+#     max_bounces          int    ray bounces (default 2)
+#     mode_conversion      bool   L→S mode conversion at back wall (default True)
 #
 #   SCAN PLAN
 #     n_scans              int    angular frames per rotation (e.g. 16, 32, 64)
@@ -343,11 +366,12 @@ def sweep_datasets(
 #     n_positions_y        int    grid positions along y (0 = 1D line)
 #     overlap_fraction     frac   overlap between adjacent cubes (min 0.2)
 #
-#   RECONSTRUCTION
+#   TFM RECONSTRUCTION
 #     mode                 str    '2d' (B-scans only) or '3d' (+ iradon recon)
 #     tfm_z_start          (m)    TFM start depth
 #     tfm_z_end            (m)    TFM end depth (None = thickness - 5mm)
 #     tfm_n_pixels         int    TFM grid size (e.g. 400, 800)
+#     tfm_db_range         (dB)   display dynamic range (e.g. -40, -20)
 #
 #   OUTPUT
 #     save_full_volume     bool   save the full large ground truth volume

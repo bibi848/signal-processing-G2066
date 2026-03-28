@@ -147,17 +147,19 @@ def _subtract_angular_mean(sinograms: np.ndarray) -> np.ndarray:
     mean removes this DC component, eliminating concentric ring artifacts
     in the reconstruction while preserving angle-dependent grain structure.
 
+    Returns signed deviations — iradon is a linear inversion and handles
+    negative values correctly. Clipping or taking abs destroys the sign
+    information needed to reconstruct voids/holes (negative features).
+
     Args:
         sinograms: (n_z, n_detectors, n_angles)
 
     Returns:
-        Sinograms with angular mean subtracted, same shape.
+        Sinograms with angular mean subtracted (signed), same shape.
     """
     # Mean across angles for each (depth, detector) pair
     angular_mean = sinograms.mean(axis=2, keepdims=True)
-    result = sinograms - angular_mean
-    # Clip negative values — amplitude should be non-negative
-    return np.maximum(result, 0.0).astype(np.float32)
+    return (sinograms - angular_mean).astype(np.float32)
 
 
 # ── Inverse Radon reconstruction ─────────────────────────────────────
@@ -203,8 +205,9 @@ def reconstruct_volume(
         )
         volume[z] = recon.astype(np.float32)
 
-    # Clip negative values (reconstruction artifacts)
-    volume = np.maximum(volume, 0.0)
+    # Take absolute value — defects may reconstruct as negative (voids)
+    # or positive (scatterers); abs preserves both
+    volume = np.abs(volume)
 
     print(f"  Reconstructed volume shape: {volume.shape}")
     return volume
@@ -680,14 +683,26 @@ def reconstruct_and_compare(
     # 1. Load B-scans
     bscans_db, meta = load_bscans(scan_dir)
 
-    # 2. Convert to linear, taper lateral edges, re-normalise globally
-    bscans_lin = db_to_linear(bscans_db)
+    # 2. Convert to linear amplitude
+    data_fmt = meta.get('data_format', 'db')
+    if data_fmt == 'linear_envelope':
+        # Already linear (e.g. from fmc_to_npy.py) — use directly
+        bscans_lin = bscans_db.copy()
+    else:
+        # dB-scale data (from png_to_npy.py or synthetic pipeline)
+        bscans_lin = db_to_linear(bscans_db)
+        vmin_db = meta.get('vmin_db', None)
+        if vmin_db is not None:
+            floor = np.float32(10.0 ** (vmin_db / 20.0))
+            bscans_lin = np.maximum(bscans_lin - floor, 0.0)
+
+    # Taper lateral edges and normalise
     bscans_lin = _apply_lateral_taper(bscans_lin, taper_fraction=0.1)
     global_max = bscans_lin.max()
     if global_max > 0:
         bscans_lin /= global_max
 
-    # 3. Build sinograms and remove rotationally invariant component (wall echoes)
+    # 3. Build sinograms and remove wall echoes (rotationally invariant component)
     sinograms = build_sinograms(bscans_lin)
     sinograms = _subtract_angular_mean(sinograms)
 
