@@ -807,11 +807,14 @@ def scan_volume_3d(
     # geometric spreading 1/r diverges, which would blow up the FMC amplitude.
     gate_z = cfg.material.c_L * 2e-6 / 2   # depth of 2 µs gate (≈ 6.3 mm for Al)
     born_z_start = max(gate_z * 1.2, 1e-3)  # 20 % margin above gate, at least 1 mm
+    # Use the voxel size as grid spacing so grain boundaries are resolved;
+    # fall back to 0.5 mm when no voxel volume is provided.
+    born_step = voxel_volume.voxel_size if voxel_volume is not None else 5e-4
     born_z_grid = np.linspace(born_z_start, specimen.thickness,
-                              max(2, int((specimen.thickness - born_z_start) / 5e-4) + 1))
+                              max(2, int((specimen.thickness - born_z_start) / born_step) + 1))
     born_l_grid = np.linspace(
         -half_w, half_w,
-        max(2, int(cfg.array.aperture / 5e-4) + 1),
+        max(2, int(cfg.array.aperture / born_step) + 1),
     )
 
     for i, theta in enumerate(angles):
