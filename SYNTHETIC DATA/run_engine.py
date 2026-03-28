@@ -111,7 +111,9 @@ def add_noise(fmc_data: np.ndarray, snr_db: float = 35.0,
 
 def apply_bandpass_filter(fmc_data: np.ndarray, dt: float,
                            frequency: float,
-                           bandwidth_fraction: float = 0.6) -> np.ndarray:
+                           bandwidth_fraction: float = 0.6,
+                           filter_alpha: float = 1.0,
+                           hanning_bool: bool = False) -> np.ndarray:
     """
     Apply bandpass filter to all A-scans in FMC data.
 
@@ -120,6 +122,8 @@ def apply_bandpass_filter(fmc_data: np.ndarray, dt: float,
         dt: Time step (s)
         frequency: Center frequency (Hz)
         bandwidth_fraction: Fractional bandwidth (e.g. 0.6 = 60%)
+        filter_alpha: Tukey window taper parameter (0=rectangular, 1=Hann)
+        hanning_bool: Pre-window signal with Hanning before FFT
 
     Returns:
         Filtered FMC data
@@ -136,7 +140,7 @@ def apply_bandpass_filter(fmc_data: np.ndarray, dt: float,
         for rx in range(num_rx):
             filtered[tx, rx, :] = filter_signal(
                 fmc_data[tx, rx, :], dt, f_start, f_end,
-                filter_alpha=1.0, hanning_bool=False
+                filter_alpha=filter_alpha, hanning_bool=hanning_bool
             )
 
     return filtered
@@ -803,11 +807,14 @@ def scan_volume_3d(
     # geometric spreading 1/r diverges, which would blow up the FMC amplitude.
     gate_z = cfg.material.c_L * 2e-6 / 2   # depth of 2 µs gate (≈ 6.3 mm for Al)
     born_z_start = max(gate_z * 1.2, 1e-3)  # 20 % margin above gate, at least 1 mm
+    # Use the voxel size as grid spacing so grain boundaries are resolved;
+    # fall back to 0.5 mm when no voxel volume is provided.
+    born_step = voxel_volume.voxel_size if voxel_volume is not None else 5e-4
     born_z_grid = np.linspace(born_z_start, specimen.thickness,
-                              max(2, int((specimen.thickness - born_z_start) / 5e-4) + 1))
+                              max(2, int((specimen.thickness - born_z_start) / born_step) + 1))
     born_l_grid = np.linspace(
         -half_w, half_w,
-        max(2, int(cfg.array.aperture / 5e-4) + 1),
+        max(2, int(cfg.array.aperture / born_step) + 1),
     )
 
     for i, theta in enumerate(angles):
@@ -856,7 +863,9 @@ def scan_volume_3d(
         fmc = add_noise(fmc, snr_db=cfg.acquisition.snr_db,
                         grain_noise_level=cfg.acquisition.grain_noise_level)
         fmc = apply_bandpass_filter(fmc, cfg.dt, cfg.array.frequency,
-                                    bandwidth_fraction=cfg.array.bandwidth)
+                                    bandwidth_fraction=cfg.array.bandwidth,
+                                    filter_alpha=cfg.acquisition.filter_alpha,
+                                    hanning_bool=cfg.acquisition.hanning_bool)
 
         img_db, _, _ = reconstruct_tfm(
             fmc, time_axis, elem_x, cfg.material.c_L,
@@ -902,12 +911,6 @@ def main():
         CylindricalDefect(
             center_z=15e-3, center_x=8e-3, radius=1e-3,
             y_start=-specimen.depth / 2, y_end=specimen.depth / 2,
-        ),
-        # Planar crack in a central y-slab
-        PlanarCrack3D(
-            start_z=35e-3, start_x=-5e-3,
-            end_z=35e-3,   end_x=5e-3,
-            y_start=-5e-3, y_end=5e-3,
         ),
     ]
 

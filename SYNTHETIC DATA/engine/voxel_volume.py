@@ -120,7 +120,7 @@ class VoxelVolume3D:
         imp_flat = map_coordinates(
             self.impedance.astype(np.float64),
             coords,
-            order=1,           # trilinear interpolation
+            order=0,           # nearest-neighbor: preserves sharp grain boundaries
             mode='constant',   # out-of-bounds → background
             cval=bg_Z,
         )
@@ -137,29 +137,38 @@ class VoxelVolume3D:
         """
         Extract significant scattering points from the scan-plane slice.
 
-        Uses the Born (first-order) approximation:
-            amplitude = δZ / (2·Z₀)   where δZ = Z_local − Z₀
+        Scattering arises from impedance **changes** at grain boundaries,
+        not from the bulk offset of each grain.  We use the signed
+        depth-gradient of impedance as the Born amplitude:
 
-        Only voxels where |δZ / (2·Z₀)| > threshold are returned, pruning
-        the background interior of each grain and keeping only boundaries.
+            amplitude = ΔZ_z / (2·Z₀)
+
+        where ΔZ_z is the impedance difference between adjacent voxels
+        in the depth (z) direction.  This correctly produces:
+          - more scatterers for finer grains (more boundary surface area)
+          - zero amplitude inside grain interiors (uniform Z)
+          - signed amplitudes so scatterers sum incoherently (realistic speckle)
 
         Args:
             theta:        Rotation angle of the scan plane (rad)
             z_grid:       Depth sampling grid (m)
             lateral_grid: Lateral sampling grid (m)
             background_Z: Background impedance Z₀ (Pa·s/m)
-            threshold:    Minimum relative amplitude to include a scatterer
+            threshold:    Minimum |amplitude| to include a scatterer
 
         Returns:
             (z_s, x_s, amp_s) — each (N_scatterers,):
                 z_s:   depth of each scatterer (m)
                 x_s:   lateral coordinate in the scan plane (m)
-                amp_s: Born scattering amplitude (dimensionless)
+                amp_s: Born scattering amplitude (dimensionless, signed)
         """
         imp_2d = self.slice_at_angle(theta, z_grid, lateral_grid)
 
-        # Born amplitude map
-        delta_rel = (imp_2d - background_Z) / (2.0 * background_Z)
+        # Signed depth-gradient: impedance jump between adjacent voxels in z.
+        # Zero inside uniform grain interiors, non-zero at boundaries.
+        # The sign preserves incoherent summation (realistic speckle).
+        delta_z = np.diff(imp_2d, axis=0, prepend=imp_2d[:1, :])
+        delta_rel = delta_z / (2.0 * background_Z)
 
         # Keep only significant boundaries
         mask = np.abs(delta_rel) > threshold

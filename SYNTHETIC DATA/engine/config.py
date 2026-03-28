@@ -121,6 +121,8 @@ class AcquisitionConfig:
     snr_db: float = 35.0
     grain_noise_level: float = 0.05
     add_noise: bool = True
+    filter_alpha: float = 1.0     # Tukey window taper for bandpass (0=rect, 1=Hann)
+    hanning_bool: bool = False    # Pre-window signal with Hanning before FFT
 
 
 @dataclass
