@@ -30,7 +30,7 @@ all_pictures    = False
 filtered_data   = True
 angular_filter  = False
 
-engine  = 'gpu' # python/cpp/gpu
+engine  = 'cpp' # python/cpp/gpu
 threads = 512
 
 # Threshold Parameters
