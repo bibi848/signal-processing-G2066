@@ -29,8 +29,8 @@ cwd                 = Path.cwd().parent
 file                = 'Al_70_1_1.mat'
 
 # Filtering Parameters
-filter_alpha = 0.9
-MHz_percentage  = 0.3 # percentage
+filter_alpha = 1.0
+MHz_percentage  = 0.7 # percentage
 hanning_bool = False
 
 # Input and Output paths.
@@ -247,11 +247,13 @@ fig, ax = plt.subplots(1, 2, figsize=(12, 5))
 # Time-domain overlay
 ax[0].plot(time, signal, label="Original", alpha=0.7, color='gray')
 ax[0].plot(time, filtered_signal, label="Filtered", color='blue')
+ax[0].axvline(x=3.1e-5, color='red', linestyle='--', label='Crop')
 ax[0].set_xlabel("Time [s]")
 ax[0].set_ylabel("Amplitude")
 ax[0].set_title("Time Domain")
 ax[0].grid(True)
-ax[0].legend(loc='upper right')
+# ax[0].legend(loc='upper right')
+ax[0].legend()
 
 # Frequency-domain overlay
 ax[1].plot(freqs, magnitude / np.max(magnitude), c='r', label="Original")
