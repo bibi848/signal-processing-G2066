@@ -82,9 +82,9 @@ for folder in speed_sound_files:
     with h5py.File(h5_path, 'r') as f:
         time_data = np.array(f["time_data"])
     
-    speed_sound = calcSpeedOfSound(time_np, time_data, t_threshold, 
-                                   threshold_shift, block_depth, displayBool=True,
-                                   elements=[10])
+    speed_sound = calcSpeedOfSound(time_np, time_data, t_threshold, threshold_shift, 
+                                   block_depth, amplitude_threshold=0.2, calculation_type='interp',
+                                   displayBool=True, elements=[5], savePicBool=False)
     
     print(f'Speed of Sound: {speed_sound:.2f} m/s')
     print()
@@ -150,6 +150,12 @@ plt.axvline(left_crop, linewidth=1.5, c='r')
 plt.axvline(right_crop, linewidth=1.5, c='r')
 plt.axhline(top_crop, linewidth=1.5, c='r')
 plt.axis("off")
+plt.savefig(
+    'Images/cropped_and_binarised_example.png',
+    dpi=300,
+    bbox_inches='tight',
+    pad_inches=0
+)
 plt.show()
 
 plt.imshow(binary2, cmap="gray")
