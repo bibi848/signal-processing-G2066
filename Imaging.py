@@ -20,15 +20,16 @@ from Classes.TFM1D import TFM_angular1D
 
 # Point the script to the correct subfolder.
 input_data_folder    = '1D Processed Data'
-input_data_subfolder = 'Cu Pure 15MHz 17022026'
+input_data_subfolder = 'Al Pure 10MHz Ex 09032026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
 
-display_picture = False
-save_picture    = True
+display_picture = True
+save_picture    = False
 all_pictures    = False
 filtered_data   = True
 angular_filter  = False
+img_output      = 'complex'
 
 engine  = 'cpp' # python/cpp/gpu
 threads = 512
@@ -38,13 +39,13 @@ vmax = 0.0
 vmin = -20.0
 
 # Image Parameters
-c        = 4700 # m/s
+c        = 6300 # m/s
 z_max    = 10e-3   # m
 z_min    = 40e-3   # m
 x_min    = 'xc_min' # m, can specify length
 x_max    = 'xc_max' # or just use xc_min/xc_max
-x_pixels = 500
-z_pixels = 700
+x_pixels = 400
+z_pixels = 400
 cmap     = 'viridis'
 
 # Angular Filter
@@ -154,7 +155,7 @@ for fol in image_folders:
         start_time = time.time()
 
         if CTFM:
-            img = CTFM1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img, output_db=db_bool)
+            img = CTFM1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img, output=img_output)
         elif ATFM:
             img = TFM_angular1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img, 
                               half_angle_deg, min_els, output_db=db_bool)
@@ -171,14 +172,20 @@ for fol in image_folders:
         X, Z = np.meshgrid(x_img, z_img)
         img = tfm_cpp.tfm1D(time_data, time_sec, tx0, rx0, xc, zc, X, Z, c)
 
-        if CTFM:
-            # Hilbert transform
+        if img_output == 'real':
+            img = img
+        
+        elif img_output == 'complex':
             img_analytic = hilbert(img, axis=0)
-            img = np.abs(img_analytic)
-
-            if db_bool:
-                img_max = np.max(img)
-                img = 20 * np.log10(img / img_max + 1e-10)
+            img = img_analytic
+        
+        elif img_output == 'envelope':
+            img_envelope = np.abs(hilbert(img, axis=0))
+            img = img_envelope
+        
+        elif img_output == 'db':
+            img_envelope = np.abs(hilbert(img, axis=0))
+            img = 20 * np.log10(img_envelope / (img_envelope.max() + 1e-10) + 1e-10)
 
         end_time = time.time()
         print(f"CPP execution time: {end_time - start_time:.6f}")
@@ -204,20 +211,24 @@ for fol in image_folders:
 
     # Display picture
     if display_picture:
+        if img_output == 'complex':
+            img_display = np.abs(img)  # show envelope for visualisation only
+        else:
+            img_display = img
+
         plt.figure(figsize=(x_aspect, z_aspect))
-        if db_bool:
+        if img_output == 'db':
             plt.imshow(
-                img,
+                img_display,
                 vmax=vmax,
                 vmin=vmin,
                 extent=[x_img[0]*1e3, x_img[-1]*1e3, z_img[-1]*1e3, z_img[0]*1e3],
                 aspect="auto",
                 cmap=cmap
             )
-      
         else:
             plt.imshow(
-                img,
+                img_display,
                 extent=[x_img[0]*1e3, x_img[-1]*1e3, z_img[-1]*1e3, z_img[0]*1e3],
                 aspect="auto",
                 cmap=cmap
@@ -228,14 +239,18 @@ for fol in image_folders:
         plt.title(fol)
         plt.tight_layout()
         plt.show()
-    
+
     if save_picture:
-        plt.imsave(
-            os.path.join(OUT_DIR, fol + "_TFM.png"),
-            img,
-            cmap=cmap,
-            vmin=vmin if db_bool else None,
-            vmax=vmax if db_bool else None
+        if img_output == 'complex':
+            np.save(os.path.join(OUT_DIR, fol + "_TFM.npy"), img)
+        else:
+            img_save = img
+            plt.imsave(
+                os.path.join(OUT_DIR, fol + "_TFM.png"),
+                img_save,
+                cmap=cmap,
+                vmin=vmin if img_output == 'db' else None,
+                vmax=vmax if img_output == 'db' else None
             )
 
     if not all_pictures:

@@ -46,7 +46,8 @@ from scipy.signal import hilbert
 import platform
 
 # TFM Hardware Parameters
-program_language = 'cpp' # cpp or python or gpu
+program_language = 'cpp'     # cpp or python or gpu
+img_output       = 'complex' # real, complex, envelope or db
 
 if program_language == 'cpp':
     if platform.system() == 'Windows':
@@ -191,10 +192,20 @@ def reconstruct_tfm(fmc_data: np.ndarray, time_axis: np.ndarray,
         X, Z = np.meshgrid(x_img, z_img)
         img = tfm_cpp.tfm1D(fmc_flat, time_axis, tx0, rx0, xc, zc, X, Z, c)
 
-        img_analytic = hilbert(img, axis=0)
-        img          = np.abs(img_analytic)
-        img_max      = np.max(img)
-        img_db       = 20 * np.log10(img / img_max + 1e-10)
+        if img_output == 'real':
+            img = img
+        
+        elif img_output == 'complex':
+            img_analytic = hilbert(img, axis=0)
+            img = img_analytic
+        
+        elif img_output == 'envelope':
+            img_envelope = np.abs(hilbert(img, axis=0))
+            img = img_envelope
+        
+        elif img_output == 'db':
+            img_envelope = np.abs(hilbert(img, axis=0))
+            img = 20 * np.log10(img_envelope / (img_envelope.max() + 1e-10) + 1e-10)
 
     elif program_language == 'gpu':
         tx0 = tx_arr - 1
@@ -206,14 +217,14 @@ def reconstruct_tfm(fmc_data: np.ndarray, time_axis: np.ndarray,
         img_analytic = hilbert(img, axis=0)
         img          = np.abs(img_analytic)
         img_max      = np.max(img)
-        img_db       = 20 * np.log10(img / img_max + 1e-10)      
+        img          = 20 * np.log10(img / img_max + 1e-10)      
 
     else:
-        img_db = CTFM1D(fmc_flat, time_axis, tx_arr, rx_arr, xc, zc, c, x_img, z_img, output_db=True)
+        img = CTFM1D(fmc_flat, time_axis, tx_arr, rx_arr, xc, zc, c, x_img, z_img, output_db=True)
 
     print(f"TFM Time: {time.time() - t0:.3f}s")
 
-    return img_db, x_img, z_img
+    return img, x_img, z_img
 
 
 def visualize(img_db: np.ndarray, x_img: np.ndarray, z_img: np.ndarray,
