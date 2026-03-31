@@ -117,13 +117,18 @@ def compute_scan_positions(
     aperture: float,
     n_positions_x: int = 3,
     n_positions_y: int = 2,
-    overlap_fraction: float = 0.3,
+    overlap_fraction: Optional[float] = None,
 ) -> Tuple[List[Tuple[float, float]], dict]:
     """
     Compute a grid of scan positions with overlap.
 
-    The field of view (FOV) at each position is the array aperture.
-    Adjacent positions overlap by ``overlap_fraction * aperture``.
+    The field of view (FOV) at each position is the inscribed cube side
+    after cylinder-to-cube cropping: ``aperture / sqrt(2)``.
+    Adjacent positions overlap by ``overlap_fraction * cube_side``.
+
+    When ``overlap_fraction`` is None (default), it is auto-computed as
+    ``1 - 1/sqrt(2)`` (~0.293) — the minimum overlap that guarantees
+    continuous coverage after the circular-to-square crop.
 
     Args:
         width_total:      Full specimen x-extent (m).
@@ -131,12 +136,19 @@ def compute_scan_positions(
         aperture:         Array aperture (m).
         n_positions_x:    Number of positions along x.
         n_positions_y:    Number of positions along y.
-        overlap_fraction: Fraction of aperture that overlaps (0-1).
+        overlap_fraction: Fraction of cube_side that overlaps (0-1).
+                          None = auto-compute from array geometry.
 
     Returns:
         (positions, info) where positions is a list of (px, py) in metres
         and info is a dict with step sizes, overlap, and validation.
     """
+    # Auto-compute overlap from array geometry if not specified
+    if overlap_fraction is None:
+        overlap_fraction = 1.0 - 1.0 / np.sqrt(2)  # ~0.293
+        print(f"  Overlap auto-computed from array geometry: "
+              f"{overlap_fraction:.3f} ({overlap_fraction*100:.1f}%)")
+
     # Enforce minimum 20% overlap
     if overlap_fraction < 0.2:
         print(f"  WARNING: overlap_fraction={overlap_fraction:.2f} < 0.2, "
@@ -333,7 +345,7 @@ def generate_dataset(
     # Scan grid
     n_positions_x: int = 3,
     n_positions_y: int = 2,
-    overlap_fraction: float = 0.3,
+    overlap_fraction: Optional[float] = None,
     # Array
     num_elements: int = 64,
     element_pitch: float = 0.6e-3,
