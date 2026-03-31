@@ -12,3 +12,5 @@ Test Folder
 SYNTHETIC DATA/legacy/_archived_test_files/
 *.json
 output
+Classes/__pycache__/TFM1D.cpython-313.pyc
+DATA/2D TFM Data/.DS_Store
