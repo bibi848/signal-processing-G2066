@@ -358,7 +358,7 @@ def sweep_datasets(
 #
 #   SCAN PLAN
 #     n_scans              int    angular frames per rotation (e.g. 16, 32, 64)
-#     theta_start          (rad)  e.g. -np.pi/2
+#     theta_start          (rad)  e.g . -np.pi/2
 #     theta_end            (rad)  e.g.  np.pi/2
 #
 #   SCAN GRID
