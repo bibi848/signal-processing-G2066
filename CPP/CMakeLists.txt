@@ -1,2 +1,6 @@
 add_subdirectory(TFM)
-add_subdirectory(TFM_GPU)
+
+if(HIPCC)
+    add_subdirectory(TFM_GPU)
+    add_subdirectory(TFM_U)
+endif()
