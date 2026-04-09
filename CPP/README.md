@@ -14,11 +14,16 @@ CPP/
 │   ├── tfm.h               # Public declarations (tfm1D, tfm2D)
 │   ├── tfm.cpp             # OpenMP-parallelised kernel implementations
 │   └── bindings.cpp        # pybind11 glue: numpy to C++ array conversion
-└── TFM_GPU/                # AMD GPU backend (ROCm / HIP)
-    ├── CMakeLists.txt      # Builds the tfm_gpu pybind11 module via hipcc
-    ├── tfm_gpu.h           # Public declarations (tfm1D_GPU, tfm2D_GPU)
-    ├── tfm_gpu.cpp         # HIP kernel + host-side memory management
-    └── bindings_gpu.cpp    # pybind11 glue: numpy to C++ array conversion
+├── TFM_GPU/                # AMD GPU backend (ROCm / HIP)
+|   ├── CMakeLists.txt      # Builds the tfm_gpu pybind11 module via hipcc
+|   ├── tfm_gpu.h           # Public declarations (tfm1D_GPU, tfm2D_GPU)
+|   ├── tfm_gpu.cpp         # HIP kernel + host-side memory management
+|   └── bindings_gpu.cpp    # pybind11 glue: numpy to C++ array conversion
+└── TFM_U/
+    ├── CMakeLists.txt      
+    ├── tfm_ultra.h           
+    ├── tfm_ultra.cpp         
+    └── bindings_ultra.cpp
 ```
 
 ---
