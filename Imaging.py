@@ -20,18 +20,18 @@ from Classes.TFM1D import TFM_angular1D
 
 # Point the script to the correct subfolder.
 input_data_folder    = '1D Processed Data'
-input_data_subfolder = 'Al Pure 10MHz Ex 09032026'
+input_data_subfolder = 'Al Pure 10MHz 18032026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
 
-display_picture = True
+display_picture = False
 save_picture    = False
-all_pictures    = False
+all_pictures    = True
 filtered_data   = True
 angular_filter  = False
-img_output      = 'complex'
+img_output      = 'real'
 
-engine  = 'cpp' # python/cpp/gpu
+engine  = 'gpu' # python/cpp/gpu
 threads = 512
 
 # Threshold Parameters
@@ -77,6 +77,7 @@ image_folders = [
     if os.path.isdir(os.path.join(IN_DIR, f))
 ]
 image_folders = np.sort(image_folders)
+image_folders = [x for x in image_folders if 'Speed of Sound' not in x]
 if "2D" in input_data_folder:
     image_folders = [x for x in image_folders if '1D' in x]    
 
@@ -197,14 +198,20 @@ for fol in image_folders:
         X, Z = np.meshgrid(x_img, z_img)
         img = tfm_gpu.tfm1D_GPU(time_data, time_sec, tx0, rx0, xc, zc, X, Z, c, threads)
 
-        if CTFM:
-            # Hilbert transform
+        if img_output == 'real':
+            img = img
+        
+        elif img_output == 'complex':
             img_analytic = hilbert(img, axis=0)
-            img = np.abs(img_analytic)
-
-            if db_bool:
-                img_max = np.max(img)
-                img = 20 * np.log10(img / img_max + 1e-10)
+            img = img_analytic
+        
+        elif img_output == 'envelope':
+            img_envelope = np.abs(hilbert(img, axis=0))
+            img = img_envelope
+        
+        elif img_output == 'db':
+            img_envelope = np.abs(hilbert(img, axis=0))
+            img = 20 * np.log10(img_envelope / (img_envelope.max() + 1e-10) + 1e-10)
 
         end_time = time.time()
         print(f"GPU ROCm execution time: {end_time - start_time:.6f}")
