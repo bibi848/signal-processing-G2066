@@ -85,7 +85,7 @@ if '2D' in input_data_folder:
 print(f'Found {len(image_folders)} image folders')
 
 
-def postprocess(raw: np.ndarray, mode: str):
+def postprocess(raw, mode):
     if mode == 'real':
         return raw
     analytic = hilbert(raw, axis=0)
@@ -98,7 +98,7 @@ def postprocess(raw: np.ndarray, mode: str):
         return 20.0 * np.log10(envelope / (envelope.max() + 1e-10) + 1e-10)
     return raw
 
-def display_image(img: np.ndarray, x_img: np.ndarray, z_img: np.ndarray, title: str, xa: int, za: int):
+def display_image(img, x_img, z_img, title, xa, za):
     img_disp = np.abs(img) if np.iscomplexobj(img) else img
     plt.figure(figsize=(xa, za))
     kwargs = dict(
@@ -116,7 +116,7 @@ def display_image(img: np.ndarray, x_img: np.ndarray, z_img: np.ndarray, title: 
     plt.tight_layout()
     plt.show()
 
-def load_reference_geometry(ref_folder: str):
+def load_reference_geometry(ref_folder):
     file_path = os.path.join(IN_DIR, ref_folder)
 
     metadata = pd.read_csv(os.path.join(file_path, 'metadata.csv'))
@@ -168,7 +168,7 @@ def load_reference_geometry(ref_folder: str):
         'zc_shape': zc_vals.shape,
     }
 
-def validate_folder_against_reference(folder: str, ref: dict) -> None:
+def validate_folder_against_reference(folder, ref):
     file_path = os.path.join(IN_DIR, folder)
 
     tx_rx = pd.read_csv(os.path.join(file_path, 'tx_rx.csv'))
@@ -205,8 +205,7 @@ def validate_folder_against_reference(folder: str, ref: dict) -> None:
                 f'{folder}: time_data shape mismatch {tuple(dset.shape)} != {(ref["Nf"], ref["Nt"])}'
             )
 
-def load_batch_into_buffer(buffer: np.ndarray, folders: list[str], ref: dict, validate_geometry: bool = False) -> tuple[list[dict], float]:
-    """Fill the provided host buffer directly from HDF5 datasets."""
+def load_batch_into_buffer(buffer, folders, ref, validate_geometry = False):
     io_start = time.perf_counter()
     batch_meta: list[dict] = []
 
