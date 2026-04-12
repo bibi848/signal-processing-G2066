@@ -20,16 +20,15 @@ from Classes.TFM1D import TFM_angular1D
 
 # Point the script to the correct subfolder.
 input_data_folder    = '1D Processed Data'
-input_data_subfolder = 'Al Pure 10MHz 18032026'
+input_data_subfolder = 'Al Pure 10MHz 17022026'
 output_data_folder   = '1D TFM Data'
 cwd                  = os.getcwd()
 
-display_picture = False
+display_picture = True
 save_picture    = False
-all_pictures    = True
-filtered_data   = True
-angular_filter  = False
-img_output      = 'real'
+all_pictures    = False
+filtered_data   = False
+img_output      = 'db' # real, complex, envelope, db
 
 engine  = 'gpu' # python/cpp/gpu
 threads = 512
@@ -58,14 +57,10 @@ z_aspect = 8
 x_aspect = 8
 
 # Input and Output paths.
-if filtered_data and not angular_filter:
+if filtered_data:
     IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, (input_data_subfolder+' Filtered'))
     OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, (input_data_subfolder+' Filtered'))
     os.makedirs(OUT_DIR, exist_ok=True)
-elif filtered_data and angular_filter:
-    IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, (input_data_subfolder+' Filtered'))
-    OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, (input_data_subfolder+' Angular'))
-    os.makedirs(OUT_DIR, exist_ok=True)  
 else:
     IN_DIR  = os.path.join(cwd, 'DATA', input_data_folder, input_data_subfolder)
     OUT_DIR = os.path.join(cwd, 'DATA', output_data_folder, input_data_subfolder)
@@ -111,12 +106,10 @@ elif engine == 'gpu':
     print('GPU Available')
     print()
 
-if filtered_data and not angular_filter:
-    CTFM, ATFM, db_bool = True, False, True
-elif filtered_data and angular_filter:
-    CTFM, ATFM, db_bool = False, True, True
+if filtered_data:
+    CTFM, db_bool = True, True
 else:
-    CTFM, ATFM, db_bool = False, False, False
+    CTFM, db_bool = False, False
 
 #%%
 # Looping over available files
@@ -157,9 +150,6 @@ for fol in image_folders:
 
         if CTFM:
             img = CTFM1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img, output=img_output)
-        elif ATFM:
-            img = TFM_angular1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img, 
-                              half_angle_deg, min_els, output_db=db_bool)
         else:
             img = TFM1D(time_data, time_sec, tx, rx, xc, zc, c, x_img, z_img)
 

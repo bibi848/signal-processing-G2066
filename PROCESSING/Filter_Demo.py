@@ -23,14 +23,15 @@ from Classes.Filter import filter_signal
 
 # Point the script to the correct subfolder.
 raw_data_type       = '1D Raw Data'
-raw_data_name       = 'Al Pure 10MHz 17022026'
+raw_data_name       = 'Al Hole 5MHz 02022026'
 processed_data_type = '1D Processed Data'
 cwd                 = Path.cwd().parent
-file                = 'Al_70_1_1.mat'
+file                = 'Al_40_11.mat'
+save_fig            = True
 
 # Filtering Parameters
-filter_alpha = 1.0
-MHz_percentage  = 0.7 # percentage
+filter_alpha = 0.2
+MHz_percentage  = 0.2 # percentage
 hanning_bool = False
 
 # Input and Output paths.
@@ -178,7 +179,8 @@ ax[1].set_title("Frequency Domain")
 ax[1].grid(True)
 
 plt.tight_layout()
-plt.savefig("Images/time_frequency_signal.png", dpi=300, bbox_inches="tight")
+if save_fig:
+    plt.savefig("Images/time_frequency_signal_defect.png", dpi=300, bbox_inches="tight")
 plt.show()
 
 #%%
@@ -247,7 +249,7 @@ fig, ax = plt.subplots(1, 2, figsize=(12, 5))
 # Time-domain overlay
 ax[0].plot(time, signal, label="Original", alpha=0.7, color='gray')
 ax[0].plot(time, filtered_signal, label="Filtered", color='blue')
-ax[0].axvline(x=3.1e-5, color='red', linestyle='--', label='Crop')
+# ax[0].axvline(x=3.1e-5, color='red', linestyle='--', label='Crop')
 ax[0].set_xlabel("Time [s]")
 ax[0].set_ylabel("Amplitude")
 ax[0].set_title("Time Domain")
@@ -266,7 +268,8 @@ ax[1].grid(True)
 ax[1].legend(loc='upper right')
 
 plt.tight_layout()
-plt.savefig("Images/filtered_time_frequency_signal.png", dpi=300, bbox_inches="tight")
+if save_fig:
+    plt.savefig("Images/filtered_time_frequency_signal_defect.png", dpi=300, bbox_inches="tight")
 plt.show()
 # %%
 
@@ -286,7 +289,8 @@ plt.legend(loc='upper right')
 plt.grid(True)
 plt.tight_layout()
 
-plt.savefig("Images/hilbert_envelope_signal.png", dpi=300, bbox_inches="tight")
+if save_fig:
+    plt.savefig("Images/hilbert_envelope_signal_defect.png", dpi=300, bbox_inches="tight")
 plt.show()
 
 #%%
