@@ -16,7 +16,6 @@ from scipy.signal import hilbert
 
 from Classes.TFM1D import TFM1D
 from Classes.TFM1D import CTFM1D
-from Classes.TFM1D import TFM_angular1D
 
 # Point the script to the correct subfolder.
 input_data_folder    = '1D Processed Data'
@@ -46,10 +45,6 @@ x_max    = 'xc_max' # or just use xc_min/xc_max
 x_pixels = 400
 z_pixels = 400
 cmap     = 'viridis'
-
-# Angular Filter
-half_angle_deg = 30
-min_els        = 40
 
 # Aspect Ratio
 real_aspect_ratio = False
