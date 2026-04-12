@@ -144,3 +144,11 @@ When working on this repository, please work in your dedicated branch. You can g
     git merge main
 
 in your branch. When you would like to upload your work to the main branch, commit and push your staged changes as you would normally. The changes will appear on the web version of GitHub where we can evaluate the pull request. This ensures that there are no large clashes when uploading lots of work. 
+
+---
+
+### Citation
+
+Djuric, O., Bruce-Gardyne, O., & Tabet, T. (2026).
+signal-processing-G2066. GitHub.
+https://github.com/bibi848/signal-processing-G2066
