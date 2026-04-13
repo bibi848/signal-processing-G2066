@@ -84,7 +84,7 @@ for folder in speed_sound_files:
     
     speed_sound = calcSpeedOfSound(time_np, time_data, t_threshold, threshold_shift, 
                                    block_depth, amplitude_threshold=0.2, calculation_type='interp',
-                                   displayBool=True, elements=[5], savePicBool=False)
+                                   displayBool=True, elements=[1], savePicBool=False)
     
     print(f'Speed of Sound: {speed_sound:.2f} m/s')
     print()
@@ -121,21 +121,23 @@ depth_pixel_size   = 0.038e-3 # m
 
 #%%
 # Example Binary and Cropped Images
+from matplotlib.patches import Rectangle
+
 # Processing Parameters
 binary_threshold = 0.78
-left_crop = 200
+left_crop = 150
 right_crop = int(left_crop + (800 - 2*left_crop))
 top_crop = int(800 / 4)
-bottom_crop = 0
+bottom_crop = 20
 
 img1 = read_png(image_files1[2])
 img2 = read_png(image_files1[3])
 
 # Grey scale
-if img1.ndim == 3: img1 = img1.mean(axis=2)
-else: img1 = img1
-if img2.ndim == 3: img2 = img2.mean(axis=2)
-else: img2 = img2
+if img1.ndim == 3:
+    img1 = img1.mean(axis=2)
+if img2.ndim == 3:
+    img2 = img2.mean(axis=2)
 
 crop = (
     slice(top_crop, 800 - bottom_crop),
@@ -145,25 +147,52 @@ crop = (
 binary1 = (img1 > binary_threshold).astype(float)
 binary2 = (img2 > binary_threshold).astype(float)
 
-plt.imshow(binary1, cmap="gray")
-plt.axvline(left_crop, linewidth=1.5, c='r')
-plt.axvline(right_crop, linewidth=1.5, c='r')
-plt.axhline(top_crop, linewidth=1.5, c='r')
-plt.axis("off")
-plt.savefig(
-    'Images/cropped_and_binarised_example.png',
-    dpi=300,
-    bbox_inches='tight',
-    pad_inches=0
-)
-plt.show()
+# Make sure save directory exists
+os.makedirs("Images", exist_ok=True)
 
-plt.imshow(binary2, cmap="gray")
-plt.axvline(left_crop, linewidth=1.5, c='r')
-plt.axvline(right_crop, linewidth=1.5, c='r')
-plt.axhline(top_crop, linewidth=1.5, c='r')
-plt.axis("off")
-plt.show()
+def plot_cropped_overlay(binary_img, save_path):
+    h, w = binary_img.shape
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.imshow(binary_img, cmap="gray")
+
+    # RGBA overlay: red outside crop, transparent inside crop
+    overlay = np.zeros((h, w, 4), dtype=float)
+    overlay[..., 0] = 1.0   # red channel
+    overlay[..., 1] = 0.0
+    overlay[..., 2] = 0.0
+    overlay[..., 3] = 0.0   # start fully transparent
+
+    # Set alpha outside kept region
+    overlay[:top_crop, :, 3] = 0.28
+    if bottom_crop > 0:
+        overlay[h-bottom_crop:, :, 3] = 0.28
+    overlay[top_crop:h-bottom_crop if bottom_crop > 0 else h, :left_crop, 3] = 0.28
+    overlay[top_crop:h-bottom_crop if bottom_crop > 0 else h, right_crop:, 3] = 0.28
+
+    ax.imshow(overlay, interpolation="none")
+
+    rect = Rectangle(
+        (left_crop, top_crop),
+        right_crop - left_crop,
+        (h - bottom_crop) - top_crop,
+        linewidth=2,
+        edgecolor='red',
+        facecolor='none'
+    )
+    ax.add_patch(rect)
+
+    ax.axis("off")
+    fig.savefig(
+        save_path,
+        dpi=300,
+        bbox_inches='tight',
+        pad_inches=0
+    )
+    plt.show()
+
+plot_cropped_overlay(binary1, 'Images/cropped_and_binarised_example_1.png')
+plot_cropped_overlay(binary2, 'Images/cropped_and_binarised_example_2.png')
 
 #%%
 # Binary-ing and Cropping All Data
@@ -218,6 +247,12 @@ plt.axvline(left_offset + w1, linestyle=":", linewidth=2)
 plt.axvline(x2, linestyle=":", linewidth=2)
 plt.axvline(x2 + w2, linestyle=":", linewidth=2)
 
+plt.savefig(
+    'Images/example_stitch_overlay.png',
+    dpi=300,
+    bbox_inches='tight',
+    pad_inches=0
+)
 plt.show()
 
 print(f'Pixel Shift: {-1*dx}')
