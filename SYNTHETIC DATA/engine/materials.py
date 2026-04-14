@@ -12,8 +12,12 @@ ALUMINUM = MaterialProperties(
     c_L=6320.0,      # m/s longitudinal
     c_S=3130.0,      # m/s shear
     density=2700.0,   # kg/m³
-    attenuation_L=0.03,  # Np/m/MHz
-    attenuation_S=0.05,  # Np/m/MHz (shear attenuates more)
+    # Wrought Al 6061-T6 at 5–15 MHz: literature reports α_L in the range
+    # 0.3–1.0 Np/m/MHz (~3–10 dB over 80 mm round-trip). We use 0.5 as a
+    # mid-range value — enough to produce a visible depth gradient without
+    # over-attenuating the back-wall echo.
+    attenuation_L=0.5,   # Np/m/MHz
+    attenuation_S=0.8,   # Np/m/MHz (shear attenuates more)
 )
 
 STEEL_MILD = MaterialProperties(

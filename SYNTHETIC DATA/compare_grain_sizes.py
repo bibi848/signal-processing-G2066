@@ -266,7 +266,7 @@ def main():
     if args.output:
         out_path = args.output
     else:
-        out_dir = os.path.join(os.path.dirname(__file__), 'output')
+        out_dir = os.path.join(os.path.dirname(__file__), 'output', 'plots')
         os.makedirs(out_dir, exist_ok=True)
         out_path = os.path.join(out_dir, 'grain_size_comparison.png')
 

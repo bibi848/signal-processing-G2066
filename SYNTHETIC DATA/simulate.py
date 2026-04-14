@@ -224,7 +224,7 @@ def run_scan(
         cfg:                Simulation configuration.
         scan_plan:          Rotational scan plan.
         output_dir:         Where to save results. Defaults to
-                            ``SYNTHETIC DATA/output/scan_3d/``.
+                            ``SYNTHETIC DATA/output/scans/scan_3d/``.
         voxel_volume:       Grain/defect voxel volume (Born scattering).
         use_voxel_world:    If True, Born scattering handles defects
                             (no Kirchhoff). If False, geometric defects
@@ -240,7 +240,7 @@ def run_scan(
         Path to the output directory.
     """
     if output_dir is None:
-        output_dir = os.path.join(os.path.dirname(__file__), 'output', 'scan_3d')
+        output_dir = os.path.join(os.path.dirname(__file__), 'output', 'scans', 'scan_3d')
 
     print(cfg.summary())
 
@@ -493,7 +493,7 @@ def demo_al_hole(no_defects: bool = False):
         ]
 
     suffix = 'no_defects' if no_defects else 'with_defect'
-    out = os.path.join(os.path.dirname(__file__), 'output', f'scan_3d_{suffix}')
+    out = os.path.join(os.path.dirname(__file__), 'output', 'scans', f'scan_3d_{suffix}')
 
     scan_and_reconstruct(
         specimen,
