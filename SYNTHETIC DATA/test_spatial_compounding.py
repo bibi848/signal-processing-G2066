@@ -69,7 +69,7 @@ def simulate_specimen(
     use_grain_noise: bool = False,
     mean_grain_size_m: float = 0.5e-3,
     tfm_n_pixels: int = 400,
-    output_dir: str = 'output/compound_test',
+    output_dir: str = 'output/radon_tests/compound_test',
     seed: int = 42,
 ) -> str:
     """
@@ -447,7 +447,7 @@ def main():
     # Output
     parser.add_argument('--output-dir', type=str,
                         default=os.path.join(os.path.dirname(__file__),
-                                             'output', 'compound_test'))
+                                             'output', 'radon_tests', 'compound_test'))
     parser.add_argument('--save-volumes', action='store_true')
     parser.add_argument('--show-napari', action='store_true')
     parser.add_argument('--skip-sim', action='store_true',

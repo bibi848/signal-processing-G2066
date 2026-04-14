@@ -126,6 +126,66 @@ class VoxelVolume3D:
         )
         return imp_flat.reshape(ZZ.shape).astype(np.float32)
 
+    def _slice_at_angle_elevated(
+        self,
+        theta: float,
+        z_grid: np.ndarray,
+        lateral_grid: np.ndarray,
+        element_height: float,
+        n_slices: int = 5,
+    ) -> np.ndarray:
+        """
+        Sample impedance integrated over the elevation aperture.
+
+        Sums impedance from ``n_slices`` parallel planes spanning
+        ±element_height/2 perpendicular to the scan plane.  This models
+        the finite beam width of the array element in the elevation (y)
+        direction.
+
+        Args:
+            theta:          Scan-plane rotation angle (rad)
+            z_grid:         (n_z_out,) depth values to sample (m)
+            lateral_grid:   (n_L,) lateral values to sample (m)
+            element_height: Elevation aperture of one element (m)
+            n_slices:       Number of sub-slices across the aperture
+
+        Returns:
+            imp_sum: (n_z_out, n_L) float32 — summed impedance over elevation
+        """
+        from scipy.ndimage import map_coordinates
+
+        cos_t = float(np.cos(theta))
+        sin_t = float(np.sin(theta))
+
+        ZZ, LL = np.meshgrid(z_grid, lateral_grid, indexing='ij')
+        bg_Z = float(np.mean(self.impedance))
+
+        dy_offsets = np.linspace(-element_height / 2, element_height / 2,
+                                 n_slices)
+
+        imp_sum = np.zeros(ZZ.shape, dtype=np.float64)
+
+        for dy in dy_offsets:
+            # Shift sample points perpendicular to the scan plane by dy
+            x_world = LL * cos_t - dy * sin_t
+            y_world = LL * sin_t + dy * cos_t
+
+            iz_f = (ZZ      - self.origin_z) / self.voxel_size
+            iy_f = (y_world - self.origin_y) / self.voxel_size
+            ix_f = (x_world - self.origin_x) / self.voxel_size
+
+            coords = np.array([iz_f.ravel(), iy_f.ravel(), ix_f.ravel()])
+            imp_flat = map_coordinates(
+                self.impedance.astype(np.float64),
+                coords,
+                order=0,
+                mode='constant',
+                cval=bg_Z,
+            )
+            imp_sum += imp_flat.reshape(ZZ.shape)
+
+        return imp_sum.astype(np.float32)
+
     def extract_born_scatterers(
         self,
         theta: float,
@@ -133,6 +193,9 @@ class VoxelVolume3D:
         lateral_grid: np.ndarray,
         background_Z: float,
         threshold: float = 0.005,
+        element_height: 'float | None' = None,
+        n_slices: int = 5,
+        elevation_aperture: 'float | None' = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Extract significant scattering points from the scan-plane slice.
@@ -149,12 +212,19 @@ class VoxelVolume3D:
           - zero amplitude inside grain interiors (uniform Z)
           - signed amplitudes so scatterers sum incoherently (realistic speckle)
 
+        When ``element_height`` is provided, the impedance is summed over
+        multiple parallel slices spanning ±element_height/2 perpendicular
+        to the scan plane before computing the gradient.  This models the
+        finite elevation aperture of the array element.
+
         Args:
-            theta:        Rotation angle of the scan plane (rad)
-            z_grid:       Depth sampling grid (m)
-            lateral_grid: Lateral sampling grid (m)
-            background_Z: Background impedance Z₀ (Pa·s/m)
-            threshold:    Minimum |amplitude| to include a scatterer
+            theta:          Rotation angle of the scan plane (rad)
+            z_grid:         Depth sampling grid (m)
+            lateral_grid:   Lateral sampling grid (m)
+            background_Z:   Background impedance Z₀ (Pa·s/m)
+            threshold:      Minimum |amplitude| to include a scatterer
+            element_height: Elevation height of one element (m). None = thin slice.
+            n_slices:       Number of sub-slices across the elevation height
 
         Returns:
             (z_s, x_s, amp_s) — each (N_scatterers,):
@@ -162,13 +232,20 @@ class VoxelVolume3D:
                 x_s:   lateral coordinate in the scan plane (m)
                 amp_s: Born scattering amplitude (dimensionless, signed)
         """
-        imp_2d = self.slice_at_angle(theta, z_grid, lateral_grid)
+        # elevation_aperture takes precedence over the legacy element_height knob
+        aperture = elevation_aperture if elevation_aperture is not None else element_height
+        if aperture is not None and aperture > 0 and n_slices > 1:
+            imp_2d = self._slice_at_angle_elevated(
+                theta, z_grid, lateral_grid, aperture, n_slices)
+        else:
+            imp_2d = self.slice_at_angle(theta, z_grid, lateral_grid)
+            n_slices = 1
 
         # Signed depth-gradient: impedance jump between adjacent voxels in z.
         # Zero inside uniform grain interiors, non-zero at boundaries.
         # The sign preserves incoherent summation (realistic speckle).
         delta_z = np.diff(imp_2d, axis=0, prepend=imp_2d[:1, :])
-        delta_rel = delta_z / (2.0 * background_Z)
+        delta_rel = delta_z / (2.0 * background_Z * n_slices)
 
         # Keep only significant boundaries
         mask = np.abs(delta_rel) > threshold

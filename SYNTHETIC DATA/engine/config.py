@@ -47,6 +47,17 @@ class ArrayConfig:
         num_elements: Number of array elements
         element_pitch: Center-to-center element spacing (m)
         element_width: Active width of each element (m)
+        element_height: Elevation height of each element (m). Geometric
+                        height used for book-keeping / validation. Does NOT
+                        drive elevation integration — use elevation_aperture
+                        for that.
+        elevation_aperture: Physical elevation aperture (m) integrated by the
+                            simulation. When > 0, off-plane scatterers within
+                            ±elevation_aperture/2 of the scan plane contribute
+                            to echoes via uniform box integration. None or 0
+                            = thin-slice (current default).
+        n_elevation_slices: Number of sub-slices across the aperture for
+                            numerical integration of scattering.
         frequency: Center frequency (Hz)
         bandwidth: Fractional bandwidth (e.g. 0.6 = 60%)
         z_position: Depth position of the array surface (m)
@@ -54,6 +65,9 @@ class ArrayConfig:
     num_elements: int = 64
     element_pitch: float = 0.6e-3
     element_width: float = 0.54e-3
+    element_height: Optional[float] = None
+    elevation_aperture: Optional[float] = None
+    n_elevation_slices: int = 5
     frequency: float = 10e6
     bandwidth: float = 0.6
     z_position: float = 0.0
@@ -192,6 +206,7 @@ class SimulationConfig:
     scan_plan: Optional[ScanPlanConfig] = None   # None = single 2D scan
     max_bounces: int = 3
     mode_conversion: bool = True
+    wall_echoes: bool = True   # If False, skip front/back wall echoes & reverberations
     gel_thickness: float = 0.075e-3  # Gel layer thickness (m). ~0.05-0.1 mm typical.
 
     def __post_init__(self):
@@ -242,7 +257,10 @@ class SimulationConfig:
             f"  Array: {self.array.num_elements} elements, "
             f"f={self.array.frequency/1e6:.1f} MHz, "
             f"pitch={self.array.element_pitch*1e3:.2f} mm, "
-            f"BW={self.array.bandwidth*100:.0f}%",
+            f"BW={self.array.bandwidth*100:.0f}%"
+            + (f", elev={self.array.element_height*1e3:.2f} mm "
+               f"({self.array.n_elevation_slices} slices)"
+               if self.array.element_height else ""),
             f"  Specimen: {self.specimen.thickness*1e3:.1f} mm thick × "
             f"{self.specimen.width*1e3:.1f} mm wide",
             f"  Acquisition: {self.acquisition.time_samples} samples @ "

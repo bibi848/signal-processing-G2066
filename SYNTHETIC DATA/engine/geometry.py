@@ -343,7 +343,8 @@ class Defect3D(ABC):
         ...
 
     @abstractmethod
-    def slice_at_angle(self, theta: float) -> Optional[Defect2D]:
+    def slice_at_angle(self, theta: float,
+                       dy_offset: float = 0.0) -> Optional[Defect2D]:
         """
         Return the 2D cross-section of this defect in the scan plane at
         rotation angle theta.
@@ -352,8 +353,10 @@ class Defect3D(ABC):
         (cos theta, sin theta, 0) in the x-y plane.
 
         Args:
-            theta: Azimuthal rotation angle (rad), measured from x-axis
-                   toward y-axis.
+            theta:     Azimuthal rotation angle (rad), measured from x-axis
+                       toward y-axis.
+            dy_offset: Perpendicular shift of the scan plane in the
+                       elevation direction (m). 0 = nominal plane.
 
         Returns:
             A Defect2D instance in the rotated coordinate frame (lateral
@@ -403,15 +406,18 @@ class SphericalDefect(Defect3D):
             radius=float(np.sqrt(r_sq)),
         )
 
-    def slice_at_angle(self, theta: float) -> Optional[CircularDefect]:
+    def slice_at_angle(self, theta: float,
+                       dy_offset: float = 0.0) -> Optional[CircularDefect]:
         """
         Intersect the sphere with the rotated scan plane at angle theta.
 
-        d  = -center_x sin θ + center_y cos θ  (distance to scan plane)
-        L  =  center_x cos θ + center_y sin θ  (lateral in rotated frame)
+        d  = -center_x sin θ + center_y cos θ - dy_offset
+        L  =  center_x cos θ + center_y sin θ
         Visible circle radius = sqrt(r² − d²).
         """
-        d = -self.center_x * np.sin(theta) + self.center_y * np.cos(theta)
+        d = (-self.center_x * np.sin(theta)
+             + self.center_y * np.cos(theta)
+             - dy_offset)
         r_sq = self.radius ** 2 - d ** 2
         if r_sq <= 0.0:
             return None
@@ -464,26 +470,27 @@ class CylindricalDefect(Defect3D):
             radius=self.radius,
         )
 
-    def slice_at_angle(self, theta: float) -> Optional[CircularDefect]:
+    def slice_at_angle(self, theta: float,
+                       dy_offset: float = 0.0) -> Optional[CircularDefect]:
         """
         Intersect the cylinder with the rotated scan plane at angle theta.
 
         The cylinder axis runs along y at (center_x, center_z).
-        Find the y-position on the axis closest to the scan plane, clamped
-        to [y_start, y_end], then compute the perpendicular distance d from
-        that axis point to the scan plane.
+        Find the y-position on the axis closest to the (possibly offset)
+        scan plane, clamped to [y_start, y_end], then compute the
+        perpendicular distance d from that axis point to the plane.
 
-        d(y) = -center_x sin θ + y cos θ  →  zero at y* = center_x tan θ
+        d(y) = -center_x sin θ + y cos θ - dy_offset
+             →  zero at y* = (center_x sin θ + dy_offset) / cos θ
         """
         cos_t = np.cos(theta)
         sin_t = np.sin(theta)
         if abs(cos_t) < 1e-9:
-            # Scan plane is nearly parallel to the y-axis; use midpoint
             y_eff = (self.y_start + self.y_end) / 2.0
         else:
-            y_star = self.center_x * sin_t / cos_t   # = center_x * tan θ
+            y_star = (self.center_x * sin_t + dy_offset) / cos_t
             y_eff = float(np.clip(y_star, self.y_start, self.y_end))
-        d = -self.center_x * sin_t + y_eff * cos_t
+        d = -self.center_x * sin_t + y_eff * cos_t - dy_offset
         r_sq = self.radius ** 2 - d ** 2
         if r_sq <= 0.0:
             return None
@@ -529,54 +536,55 @@ class PlanarCrack3D(Defect3D):
             end_x=self.end_x,
         )
 
-    def slice_at_angle(self, theta: float) -> Optional[CrackDefect]:
+    def slice_at_angle(self, theta: float,
+                       dy_offset: float = 0.0) -> Optional[CrackDefect]:
         """
         Intersect the crack with the rotated scan plane at angle theta.
 
         The crack lies in the z-x plane at various y ∈ [y_start, y_end].
-        The scan plane satisfies y = x tan θ.  A crack point at x_c is
-        visible when x_c * tan θ ∈ [y_start, y_end].
+        The (possibly offset) scan plane satisfies
+        y = x tan θ + dy_offset / cos θ.
 
-        The projected lateral coordinate in the rotated frame is:
-            L = x_c / cos θ  (since x = L cos θ, y = L sin θ = x tan θ)
+        A crack point at x_c is visible when
+        x_c * tan θ + dy_offset / cos θ ∈ [y_start, y_end].
 
-        If no part of the crack satisfies the visibility condition, returns None.
-        For the visible sub-segment the x-coordinates are clipped then projected.
+        If no part of the crack satisfies the visibility condition,
+        returns None.
         """
         cos_t = np.cos(theta)
         sin_t = np.sin(theta)
 
         if abs(cos_t) < 1e-9:
-            # Scan plane is nearly parallel to the y-axis (θ ≈ ±π/2).
-            # Visible only if the crack spans x ≈ 0.
             x_min = min(self.start_x, self.end_x)
             x_max = max(self.start_x, self.end_x)
             if not (x_min <= 0.0 <= x_max):
                 return None
-            # Project: x → L = x/cos_t → ±∞, so approximate with x as-is
             return CrackDefect(
                 start_z=self.start_z, start_x=self.start_x,
                 end_z=self.end_z,   end_x=self.end_x,
             )
 
         tan_t = sin_t / cos_t
-        # x-range visible in this scan plane: y_req = x * tan_t ∈ [y_start, y_end]
-        x_vis_min = self.y_start / tan_t if abs(tan_t) > 1e-9 else -1e9
-        x_vis_max = self.y_end   / tan_t if abs(tan_t) > 1e-9 else  1e9
+        # y-intercept shift from elevation offset
+        y_shift = dy_offset / cos_t
+        # x-range visible: x * tan_t + y_shift ∈ [y_start, y_end]
+        if abs(tan_t) > 1e-9:
+            x_vis_min = (self.y_start - y_shift) / tan_t
+            x_vis_max = (self.y_end   - y_shift) / tan_t
+        else:
+            x_vis_min = -1e9
+            x_vis_max = 1e9
         if x_vis_min > x_vis_max:
             x_vis_min, x_vis_max = x_vis_max, x_vis_min
 
         x_crack_min = min(self.start_x, self.end_x)
         x_crack_max = max(self.start_x, self.end_x)
 
-        # Intersection of visible x-range with crack x-range
         x_lo = max(x_vis_min, x_crack_min)
         x_hi = min(x_vis_max, x_crack_max)
         if x_lo > x_hi:
             return None
 
-        # Project clipped endpoints into rotated frame (L = x / cos θ)
-        # Interpolate along the crack to get z at the clipped x values
         dx = self.end_x - self.start_x
         dz = self.end_z - self.start_z
         if abs(dx) < 1e-15:

@@ -7,9 +7,9 @@ position volumes at their correct spatial offsets.
 
 Usage:
     python view_dataset.py                          # latest dataset
-    python view_dataset.py output/dataset_20260317  # specific dataset
-    python view_dataset.py output/dataset_20260317 --layer ground_truth
-    python view_dataset.py output/dataset_20260317 --layer overlay
+    python view_dataset.py output/datasets/dataset_20260317  # specific dataset
+    python view_dataset.py output/datasets/dataset_20260317 --layer ground_truth
+    python view_dataset.py output/datasets/dataset_20260317 --layer overlay
 """
 
 import sys

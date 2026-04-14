@@ -60,15 +60,22 @@ class FMCEngine:
             front_wall_z=config.specimen.front_wall_z,
         )
         self.defects: List[Defect2D] = []
+        self._defect_scales: List[float] = []
 
         # Voxel Born scatterers set via set_born_scatterers()
         self._born_z:   Optional[np.ndarray] = None   # (N_s,) scatterer depths
         self._born_x:   Optional[np.ndarray] = None   # (N_s,) scatterer laterals
         self._born_amp: Optional[np.ndarray] = None   # (N_s,) Born amplitudes
 
-    def add_defect(self, defect: Defect2D):
-        """Register a geometric defect in the simulation."""
+    def add_defect(self, defect: Defect2D, amplitude_scale: float = 1.0):
+        """Register a geometric defect in the simulation.
+
+        amplitude_scale multiplies the Kirchhoff scattered-field amplitude.
+        Used to weight individual elevation-aperture sub-slices so their
+        superposition represents the slab-averaged cross-section.
+        """
         self.defects.append(defect)
+        self._defect_scales.append(float(amplitude_scale))
 
     def set_born_scatterers(self,
                              z_s: np.ndarray,
@@ -116,16 +123,18 @@ class FMCEngine:
         t_start = time_module.time()
 
         # --- Wall echoes (vectorized over all TX-RX pairs) ---
-        wall_arrivals = self._compute_wall_echoes(elem_x, time_axis)
-        self._add_arrivals_to_fmc(fmc_data, wall_arrivals, elem_x, time_axis)
+        wall_arrivals = None
+        if cfg.wall_echoes:
+            wall_arrivals = self._compute_wall_echoes(elem_x, time_axis)
+            self._add_arrivals_to_fmc(fmc_data, wall_arrivals, elem_x, time_axis)
 
-        # --- Mode-converted back-wall echo (L→S) ---
-        if cfg.mode_conversion:
-            self._add_mode_converted_backwall(fmc_data, elem_x, time_axis)
+            # --- Mode-converted back-wall echo (L→S) ---
+            if cfg.mode_conversion:
+                self._add_mode_converted_backwall(fmc_data, elem_x, time_axis)
 
-        # --- Back-wall reverberations (2nd, 3rd echoes) ---
-        if cfg.max_bounces >= 2:
-            self._add_reverberations(fmc_data, wall_arrivals, elem_x, time_axis)
+            # --- Back-wall reverberations (2nd, 3rd echoes) ---
+            if cfg.max_bounces >= 2:
+                self._add_reverberations(fmc_data, wall_arrivals, elem_x, time_axis)
 
         # --- Defect echoes (direct LL path) ---
         if self.defects:
@@ -331,9 +340,15 @@ class FMCEngine:
         d_rx_leg = np.sqrt(bw_z**2 + (rx_x - x_refl)**2)   # S-wave leg
 
         spreading = 1.0 / np.sqrt(np.maximum(d_tx_leg * d_rx_leg, 1e-20))
-        total_dist = d_tx_leg + d_rx_leg
-        atten = material_attenuation_array(total_dist, cfg.array.frequency,
-                                            mat.attenuation_L)
+        # Mode-converted path: L-wave on TX leg, S-wave on RX leg → each leg
+        # needs its own attenuation coefficient.
+        atten_L = material_attenuation_array(
+            d_tx_leg, cfg.array.frequency, mat.attenuation_L
+        )
+        atten_S = material_attenuation_array(
+            d_rx_leg, cfg.array.frequency, mat.attenuation_S
+        )
+        atten = atten_L * atten_S
 
         amp_LS = np.abs(R_LS) * spreading * atten
         phase_LS = np.where(R_LS < 0, np.pi, 0.0)
@@ -380,7 +395,7 @@ class FMCEngine:
 
         defect_data = []
 
-        for defect in self.defects:
+        for defect_idx, defect in enumerate(self.defects):
             # Discretize the defect surface
             surface_pts, surface_normals = defect.discretize_surface(n_points=120)
             n_pts = len(surface_pts)
@@ -458,7 +473,9 @@ class FMCEngine:
             kirchhoff_factor = np.sqrt(k / (2.0 * np.pi))
 
             # Combined amplitude per surface point
-            amplitude = (R * kirchhoff_factor * spread * atten * obliquity
+            amp_scale = (self._defect_scales[defect_idx]
+                         if defect_idx < len(self._defect_scales) else 1.0)
+            amplitude = (amp_scale * R * kirchhoff_factor * spread * atten * obliquity
                         * directivity * ds[np.newaxis, np.newaxis, :])
 
             # Phase: π for void reflection (free surface) + propagation phase
@@ -543,6 +560,7 @@ class FMCEngine:
         n_t  = len(time_axis)
         n_s  = len(self._born_z)
         dt   = float(time_axis[1] - time_axis[0])
+        alpha_np_per_m = float(cfg.material.attenuation_L * (freq / 1e6))
 
         # Build Gabor kernel centred at τ = 0
         n_half  = int(np.ceil(5.0 * sigma / dt))
@@ -550,23 +568,51 @@ class FMCEngine:
         gabor_k = (np.exp(-0.5 * (tau / sigma) ** 2)
                    * np.cos(2.0 * np.pi * freq * tau)).astype(np.float32)
 
+        # Cast scatterer coords to float32 up front so that every (n_el², n_s)
+        # array downstream is float32, not float64 — halves peak memory.
+        born_z = self._born_z.astype(np.float32, copy=False)
+        born_x = self._born_x.astype(np.float32, copy=False)
+        born_amp = self._born_amp.astype(np.float32, copy=False)
+
         # Distances: (n_el, n_s)
-        dz = self._born_z[np.newaxis, :]
-        dx = self._born_x[np.newaxis, :] - elem_x[:, np.newaxis]
-        r  = np.sqrt(dz ** 2 + dx ** 2)
+        elem_x32 = elem_x.astype(np.float32, copy=False)
+        dz = born_z[np.newaxis, :]
+        dx = born_x[np.newaxis, :] - elem_x32[:, np.newaxis]
+        r  = np.sqrt(dz ** 2 + dx ** 2).astype(np.float32)
 
         # Element directivity: sinc pattern suppresses off-axis contributions
         theta_el = np.arctan2(np.abs(dx), np.abs(dz))   # (n_el, n_s)
         wavelength = c_L / freq
-        dir_factor = element_directivity_array(theta_el, cfg.array.element_width, wavelength)
+        dir_factor = element_directivity_array(
+            theta_el, cfg.array.element_width, wavelength
+        ).astype(np.float32)
 
-        # TOF and amplitude: (n_el, n_el, n_s)
-        r_tx   = r[:, np.newaxis, :]
-        r_rx   = r[np.newaxis, :, :]
-        tof    = (r_tx + r_rx) / c_L
-        spread = 1.0 / np.sqrt(np.maximum(r_tx * r_rx, 1e-20))
-        directivity = dir_factor[:, np.newaxis, :] * dir_factor[np.newaxis, :, :]
-        amp    = (self._born_amp[np.newaxis, np.newaxis, :] * spread * directivity).astype(np.float32)
+        # TOF and amplitude: (n_el, n_el, n_s), built in float32.
+        r_tx = r[:, np.newaxis, :]
+        r_rx = r[np.newaxis, :, :]
+
+        # total_dist = r_tx + r_rx  → reused for tof, spread weighting, and
+        # the attenuation exponent, so we only materialise it once.
+        total_dist = (r_tx + r_rx).astype(np.float32)      # (n_el, n_el, n_s)
+        tof = total_dist * np.float32(1.0 / c_L)
+
+        # Combined amplitude weight: spreading × directivity × material
+        # attenuation.  Born scattering must decay with path length the same
+        # way every other path in the engine does — otherwise deep grain
+        # noise sits at full amplitude and inverts the apparent depth
+        # gradient in the image.
+        spread = np.float32(1.0) / np.sqrt(
+            np.maximum(r_tx * r_rx, np.float32(1e-20))
+        )
+        directivity = (dir_factor[:, np.newaxis, :]
+                        * dir_factor[np.newaxis, :, :])
+        # Exp into a pre-allocated buffer, then fold into spread in-place.
+        atten = np.exp((-alpha_np_per_m) * total_dist, dtype=np.float32)
+        spread *= directivity
+        spread *= atten
+        del directivity, atten                           # release ASAP
+        amp = born_amp[np.newaxis, np.newaxis, :] * spread
+        del spread
 
         # Sample indices: (n_el, n_el, n_s)
         tof_samp = np.round(tof / dt).astype(np.int32)
@@ -685,9 +731,11 @@ class FMCEngine:
         wavelength = mat.c_L / freq
         k = 2.0 * np.pi * freq / mat.c_L
 
-        for defect in self.defects:
+        for defect_idx, defect in enumerate(self.defects):
             # Use defect center as the scattering point for skip/corner
             defect_pos = defect.center
+            amp_scale = (self._defect_scales[defect_idx]
+                         if defect_idx < len(self._defect_scales) else 1.0)
 
             # --- Skip path: TX → back wall → defect → RX ---
             skip_tof, refl_x = compute_skip_path_tof(
@@ -716,7 +764,7 @@ class FMCEngine:
                     defect_size = getattr(defect, 'radius', 1e-3) * 2
                     scatter_factor = np.sqrt(k * defect_size / (2 * np.pi))
 
-                    amp = scatter_factor * spread * atten * 0.5  # 0.5 for skip attenuation
+                    amp = amp_scale * scatter_factor * spread * atten * 0.5  # 0.5 for skip attenuation
                     phase = np.pi  # Phase inversion at void
 
                     a_scan = synthesize_ascan_vectorized(
@@ -749,7 +797,7 @@ class FMCEngine:
                     defect_size = getattr(defect, 'radius', 1e-3) * 2
                     scatter_factor = np.sqrt(k * defect_size / (2 * np.pi))
 
-                    amp = scatter_factor * spread * atten * 0.5
+                    amp = amp_scale * scatter_factor * spread * atten * 0.5
                     phase = 0.0  # Double reflection: π + π = 0
 
                     a_scan = synthesize_ascan_vectorized(

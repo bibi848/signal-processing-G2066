@@ -220,7 +220,7 @@ def reconstruct_tfm(fmc_data: np.ndarray, time_axis: np.ndarray,
         img          = 20 * np.log10(img / img_max + 1e-10)      
 
     else:
-        img = CTFM1D(fmc_flat, time_axis, tx_arr, rx_arr, xc, zc, c, x_img, z_img, output_db=True)
+        img = CTFM1D(fmc_flat, time_axis, tx_arr, rx_arr, xc, zc, c, x_img, z_img, output=img_output)
 
     print(f"TFM Time: {time.time() - t0:.3f}s")
 
@@ -741,6 +741,13 @@ def visualize_scans(scan_dir: str, db_range: float = -20.0) -> None:
     print(f"  Saved animation: {gif_path}")
 
 
+def _elevation_offsets(aperture, n_slices):
+    """Compute perpendicular offsets for elevation integration."""
+    if aperture is None or aperture <= 0 or n_slices <= 1:
+        return [0.0]
+    return np.linspace(-aperture / 2, aperture / 2, n_slices).tolist()
+
+
 def scan_volume_3d(
     specimen: Specimen3D,
     defects_3d: list,
@@ -803,6 +810,7 @@ def scan_volume_3d(
         'tfm_z_end_m': tfm_z_end,
         'tfm_n_pixels': tfm_n_pixels,
         'array_aperture_m': cfg.array.aperture,
+        'has_complex_data': (img_output == 'complex'),
     }
     np.save(os.path.join(output_dir, 'scan_meta.npy'), meta, allow_pickle=True)  # type: ignore[arg-type]
 
@@ -831,14 +839,25 @@ def scan_volume_3d(
     for i, theta in enumerate(angles):
         print(f"  Frame {i+1:>3}/{n_scans}  (θ = {np.degrees(theta):+.1f}°)", end="  ")
 
-        # Slice each 3D geometric defect in the rotated scan plane
+        # Slice each 3D geometric defect in the rotated scan plane,
+        # sampling at multiple elevation offsets when element_height is set
         engine = FMCEngine(cfg)
         active = 0
+        # Drive elevation integration from the physical aperture.
+        # Fall back to element_height for backwards compatibility.
+        aperture = (cfg.array.elevation_aperture
+                    if cfg.array.elevation_aperture is not None
+                    else cfg.array.element_height)
+        dy_offsets = _elevation_offsets(aperture, cfg.array.n_elevation_slices)
+        # Uniform-box slab integration: each slice contributes 1/N of the
+        # amplitude so the superposition represents the slab-averaged echo.
+        slab_weight = 1.0 / len(dy_offsets)
         for d3 in defects_3d:
-            d2 = d3.slice_at_angle(theta)
-            if d2 is not None:
-                engine.add_defect(d2)
-                active += 1
+            for dy in dy_offsets:
+                d2 = d3.slice_at_angle(theta, dy_offset=dy)
+                if d2 is not None:
+                    engine.add_defect(d2, amplitude_scale=slab_weight)
+                    active += 1
 
         # Extract Born scatterers from voxel volume (grain noise / voxel defects)
         n_born = 0
@@ -848,6 +867,8 @@ def scan_volume_3d(
                 theta, born_z_grid, born_l_grid,
                 background_Z=cfg.material.Z_L,
                 threshold=born_threshold,
+                elevation_aperture=aperture,
+                n_slices=cfg.array.n_elevation_slices,
             )
             if len(z_s) > 0:
                 # Jitter scatterer positions by ±half grid spacing to break
@@ -878,7 +899,7 @@ def scan_volume_3d(
                                     filter_alpha=cfg.acquisition.filter_alpha,
                                     hanning_bool=cfg.acquisition.hanning_bool)
 
-        img_db, _, _ = reconstruct_tfm(
+        img, _, _ = reconstruct_tfm(
             fmc, time_axis, elem_x, cfg.material.c_L,
             x_range=(-half_w, half_w),
             z_range=(tfm_z_start, tfm_z_end),
@@ -888,7 +909,25 @@ def scan_volume_3d(
         # Save this frame
         tag = f"{i:04d}"
         np.save(os.path.join(output_dir, f'fmc_{tag}.npy'), fmc)
-        np.save(os.path.join(output_dir, f'bscan_{tag}.npy'), img_db.astype(np.float32))
+
+        if img_output == 'complex':
+            # Threshold at -10 dB of this frame's peak during the TFM stage:
+            # zero out complex samples below the cutoff before saving.
+            img_envelope = np.abs(img)
+            env_max = img_envelope.max() + 1e-10
+            db_cutoff = -10.0
+            threshold = env_max * 10.0 ** (db_cutoff / 20.0)
+            mask = img_envelope >= threshold
+            img = img * mask
+            img_db = 20 * np.log10(np.abs(img) / env_max + 1e-10)
+            img_db = np.where(mask, img_db, db_cutoff)
+            np.save(os.path.join(output_dir, f'bscan_complex_{tag}.npy'),
+                    img.astype(np.complex64))
+            np.save(os.path.join(output_dir, f'bscan_{tag}.npy'),
+                    img_db.astype(np.float32))
+        else:
+            np.save(os.path.join(output_dir, f'bscan_{tag}.npy'),
+                    img.astype(np.float32))
 
     print(f"\n  Done — {n_scans} frames saved to {output_dir}/")
 
@@ -975,7 +1014,7 @@ def main():
     )
     print(cfg.summary())
 
-    output_dir = os.path.join(os.path.dirname(__file__), 'output', 'scan_3d')
+    output_dir = os.path.join(os.path.dirname(__file__), 'output', 'scans', 'scan_3d')
 
     # ---- Preview volume before scanning ----
     preview_path = os.path.join(output_dir, 'volume_preview.png')

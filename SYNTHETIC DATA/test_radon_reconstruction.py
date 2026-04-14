@@ -32,11 +32,14 @@ from scipy.stats import pearsonr
 # Allow imports from project root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from Classes.Reconstruct3D import (
+    load_bscans_complex,
+    has_complex_bscans,
     db_to_linear,
     _apply_lateral_taper,
     build_sinograms,
     _subtract_angular_mean,
     reconstruct_volume,
+    reconstruct_volume_complex,
     _soft_circle_apodise,
     _circle_mask,
     compute_reconstruction_coords,
@@ -72,7 +75,7 @@ def simulate_specimen(
     use_grain_noise: bool = False,
     mean_grain_size_m: float = 0.5e-3,
     tfm_n_pixels: int = 400,
-    output_dir: str = 'output/radon_test',
+    output_dir: str = 'output/radon_tests/radon_test',
     seed: int = 42,
 ) -> str:
     """
@@ -172,10 +175,13 @@ def simulate_specimen(
 def load_and_reconstruct(
     scan_dir: str,
     n_scans: int,
-    filter_name: str = 'hann',
+    filter_name: str = 'shepp-logan',
 ) -> np.ndarray:
     """
     Load a subset of B-scans from scan_dir and reconstruct via inverse Radon.
+
+    Uses the complex analytic pipeline (matching MATLAB approach) when
+    complex B-scan files are available, otherwise falls back to dB envelope.
 
     Selects n_scans evenly-spaced frames from the full set.
 
@@ -191,39 +197,66 @@ def load_and_reconstruct(
     angles_rad = all_angles_rad[indices]
     angles_deg = np.degrees(angles_rad)
 
-    # Load selected B-scans
-    bscans_list = []
-    for i in indices:
-        path = os.path.join(scan_dir, f'bscan_{i:04d}.npy')
-        bscans_list.append(np.load(path))
-    bscans_db = np.stack(bscans_list, axis=0)  # (n_scans, n_z, n_lateral)
+    use_complex = has_complex_bscans(scan_dir)
 
-    # Standard reconstruction pipeline
-    data_fmt = meta.get('data_format', 'db')
-    if data_fmt == 'linear_envelope':
-        bscans_lin = bscans_db.copy()
+    if use_complex:
+        # Complex analytic pipeline (matches MATLAB approach):
+        # No taper, no normalisation, no angular mean subtraction.
+        bscans_list = []
+        for i in indices:
+            path = os.path.join(scan_dir, f'bscan_complex_{i:04d}.npy')
+            bscans_list.append(np.load(path))
+        bscans = np.stack(bscans_list, axis=0)  # (n_scans, n_z, n_lateral) complex
+
+        # Global-normalised dB threshold disabled: it creates gaps along the
+        # sinogram sine track at angles where amplitude drops below the
+        # cutoff, producing irregular (clustered) streaks in the FBP output.
+        # env = np.abs(bscans)
+        # global_max = env.max() + 1e-12
+        # db_cutoff = -10.0
+        # threshold = global_max * 10.0 ** (db_cutoff / 20.0)
+        # bscans = bscans * (env >= threshold)
+
+        sinograms = build_sinograms(bscans)
+
+        output_size = sinograms.shape[1]
+        volume = reconstruct_volume_complex(
+            sinograms, angles_deg,
+            filter_name=filter_name, circle=True, output_size=output_size,
+        )
     else:
-        bscans_lin = db_to_linear(bscans_db)
-        vmin_db = meta.get('vmin_db', None)
-        if vmin_db is not None:
-            floor = np.float32(10.0 ** (vmin_db / 20.0))
-            bscans_lin = np.maximum(bscans_lin - floor, 0.0)
+        # Fallback: dB amplitude pipeline
+        bscans_list = []
+        for i in indices:
+            path = os.path.join(scan_dir, f'bscan_{i:04d}.npy')
+            bscans_list.append(np.load(path))
+        bscans_db = np.stack(bscans_list, axis=0)
 
-    bscans_lin = _apply_lateral_taper(bscans_lin, taper_fraction=0.1)
-    global_max = bscans_lin.max()
-    if global_max > 0:
-        bscans_lin /= global_max
+        data_fmt = meta.get('data_format', 'db')
+        if data_fmt == 'linear_envelope':
+            bscans_lin = bscans_db.copy()
+        else:
+            bscans_lin = db_to_linear(bscans_db)
+            vmin_db = meta.get('vmin_db', None)
+            if vmin_db is not None:
+                floor = np.float32(10.0 ** (vmin_db / 20.0))
+                bscans_lin = np.maximum(bscans_lin - floor, 0.0)
 
-    sinograms = build_sinograms(bscans_lin)
-    sinograms = _subtract_angular_mean(sinograms)
+        bscans_lin = _apply_lateral_taper(bscans_lin, taper_fraction=0.1)
+        global_max = bscans_lin.max()
+        if global_max > 0:
+            bscans_lin /= global_max
 
-    output_size = sinograms.shape[1]
-    volume = reconstruct_volume(
-        sinograms, angles_deg,
-        filter_name=filter_name, circle=True, output_size=output_size,
-    )
+        sinograms = build_sinograms(bscans_lin)
+        sinograms = _subtract_angular_mean(sinograms)
+
+        output_size = sinograms.shape[1]
+        volume = reconstruct_volume(
+            sinograms, angles_deg,
+            filter_name=filter_name, circle=True, output_size=output_size,
+        )
+
     volume = _soft_circle_apodise(volume, rolloff_fraction=0.08)
-
     return volume
 
 
@@ -440,13 +473,13 @@ def main():
     parser.add_argument('--n-scans', type=int, nargs='+',
                         default=[4, 8, 16, 32, 64],
                         help='List of scan counts to test (default: 4 8 16 32 64)')
-    parser.add_argument('--filter', type=str, default='hann',
-                        help='FBP filter name (default: hann)')
+    parser.add_argument('--filter', type=str, default='shepp-logan',
+                        help='FBP filter name (default: shepp-logan)')
 
     # Output
     parser.add_argument('--output-dir', type=str,
                         default=os.path.join(os.path.dirname(__file__),
-                                             'output', 'radon_test'),
+                                             'output', 'radon_tests', 'radon_test'),
                         help='Output directory')
     parser.add_argument('--save-volumes', action='store_true',
                         help='Save each reconstructed volume as .npy')

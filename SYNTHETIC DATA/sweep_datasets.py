@@ -202,7 +202,7 @@ def sweep_datasets(
     if output_root is None:
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
         output_root = os.path.join(
-            os.path.dirname(__file__), 'output', f'sweep_{ts}',
+            os.path.dirname(__file__), 'output', 'sweeps', f'sweep_{ts}',
         )
 
     # Print plan

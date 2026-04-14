@@ -430,7 +430,7 @@ def generate_dataset(
     if output_root is None:
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
         output_root = os.path.join(
-            os.path.dirname(__file__), 'output', f'dataset_{ts}',
+            os.path.dirname(__file__), 'output', 'datasets', f'dataset_{ts}',
         )
     os.makedirs(output_root, exist_ok=True)
 
