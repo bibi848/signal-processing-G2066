@@ -15,7 +15,7 @@ from scipy.signal import hilbert
 
 # Point the script to the correct subfolder.
 input_data_folder    = '2D Processed Data'
-input_data_subfolder = 'Cu Pure 7.5MHz Ex 16032026'
+input_data_subfolder = 'Cu Pure 7.5MHz Ex 15042026'
 output_data_folder   = '2D TFM Data'
 cwd                  = os.getcwd()
 save_picture         = True
@@ -33,16 +33,16 @@ vmax = 0.0
 vmin = -20.0
 
 # Image Parameters
-c        = 4705.38 # m/s
-z_max    = 5e-3  # m
-z_min    = 25e-3 # m
+c        = 4636.1 # m/s
+z_max    = 15e-3  # m
+z_min    = 35e-3 # m
 x_min    = 'xc_min' # m, can specify length
 x_max    = 'xc_max' # or just use xc_min/xc_max
 y_min    = 'yc_min'
 y_max    = 'yc_max'
-x_pixels = 200
-y_pixels = 200
-z_pixels = 400
+x_pixels = 300
+y_pixels = 300
+z_pixels = 500
 
 # Input and Output paths.
 if filtered_data:
@@ -60,6 +60,7 @@ image_folders = [
     if os.path.isdir(os.path.join(IN_DIR, f))
 ]
 image_folders = [x for x in image_folders if "Speed of Sound" not in x]
+image_folders = [x for x in image_folders if "speed of sound" not in x]
 image_folders = [x for x in image_folders if "1D" not in x]
 image_folders = np.sort(image_folders)
 
