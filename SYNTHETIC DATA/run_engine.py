@@ -911,16 +911,9 @@ def scan_volume_3d(
         np.save(os.path.join(output_dir, f'fmc_{tag}.npy'), fmc)
 
         if img_output == 'complex':
-            # Threshold at -10 dB of this frame's peak during the TFM stage:
-            # zero out complex samples below the cutoff before saving.
-            img_envelope = np.abs(img)
-            env_max = img_envelope.max() + 1e-10
-            db_cutoff = -10.0
-            threshold = env_max * 10.0 ** (db_cutoff / 20.0)
-            mask = img_envelope >= threshold
-            img = img * mask
-            img_db = 20 * np.log10(np.abs(img) / env_max + 1e-10)
-            img_db = np.where(mask, img_db, db_cutoff)
+            env = np.abs(img)
+            env_max = env.max() + 1e-10
+            img_db = 20 * np.log10(env / env_max + 1e-10)
             np.save(os.path.join(output_dir, f'bscan_complex_{tag}.npy'),
                     img.astype(np.complex64))
             np.save(os.path.join(output_dir, f'bscan_{tag}.npy'),

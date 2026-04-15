@@ -151,7 +151,8 @@ def extract_rotated_slice(volume, theta_deg, array_length_mm, block_length_mm, b
 
 
 angles_deg = np.arange(0, 180, rotational_angle_deg)
-output_dir = Path('slices')
+output_dir = Path(__file__).parent / 'slices'
+output_dir.mkdir(exist_ok=True)
 
 all_slices = []
 for i, angle in enumerate(angles_deg):
