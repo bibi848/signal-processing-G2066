@@ -22,20 +22,20 @@ def remove_spikes(signal, threshold=500, verbose=False):
 
 
 # Point the script to the correct subfolder.
-raw_data_type       = '1D Raw Data'
-raw_data_name       = 'Al Pure 10MHz 18032026'
-processed_data_type = '1D Processed Data'
+raw_data_type       = '2D Raw Data'
+raw_data_name       = 'Cu Pure 7.5MHz Ex 15042026'
+processed_data_type = '2D Processed Data'
 cwd                 = os.getcwd()
 display_picture     = True
 save_picture        = False
 all_pictures        = True
 filter_data         = True
 crop_data           = True
-crop_amount         = 900
+crop_amount         = 1200
 
 # Filtering Parameters
 filter_alpha   = 1.0
-MHz_percentage = 1.5 # percentage
+MHz_percentage = 0.8 # percentage
 hanning_bool   = False
 
 # Input and Output paths.

@@ -15,17 +15,18 @@ if str(root_path) not in sys.path:
 from Classes.CalcSpeedOfSound import calcSpeedOfSound
 
 # Point the script to the correct subfolder.
-in_data_type = '1D Processed Data'
-in_data_name = 'Al Pure 10MHz Ex 09032026'
+in_data_type = '2D Processed Data'
+in_data_name = 'Cu Pure 7.5MHz Ex 15042026'
 cwd          = Path.cwd().parent
 filter_data  = True
 depth        = 53.3e-3 #mm
 
 t_threshold         = 1e-5
 threshold_shift     = 2e-5
-amplitude_threshold = 0.2
+amplitude_threshold = 0.05
 elements            = [10, 15, 20]
 calculation_type    = 'interp'
+savePicBool         = False
 
 # Input and Output paths.
 if filter_data:
@@ -45,7 +46,7 @@ print()
 
 #%%
 # Keeping necessary files
-data_folders = [x for x in data_folders if 'Speed of Sound' in x]
+data_folders = [x for x in data_folders if 'speed of sound' in x]
 print('Relevant Data')
 print(data_folders)
 print()
@@ -70,7 +71,8 @@ for folder in data_folders:
     
     sound_speed = calcSpeedOfSound(time_np, time_data, t_threshold, threshold_shift,
                                depth, amplitude_threshold, calculation_type=calculation_type,
-                               displayBool=True, elements=elements)
+                               displayBool=True, elements=elements,
+                               savePicBool=savePicBool)
     
     print('Speed of Sound:', sound_speed)
     speed_sound_list.append(sound_speed)
