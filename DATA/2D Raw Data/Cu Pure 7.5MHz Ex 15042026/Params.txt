@@ -1,0 +1,19 @@
+For the 2D array measurements, the array is rotated 4 times at each position, using the 
+3D printed guide to ensure measurements are consistent. The array is rotated anti-clockwise each time, when
+looking down at the array from above. Another photo of this will be attached. 
+
+2D Array Measurements:
+Imasonic 2D Random 128els 7.5MHz 0.77mm min pitch (box says sparse instead of random)
+FMC
+50MHz (sample frequency)
+1200 time points
+70dB gain
+64 averages
+
+Speed of sound:
+Imasonic 1D 64 els 5MHz 0.63mm pitch
+FMC
+25MHz sample frequency
+2000
+40dB
+64 averages
