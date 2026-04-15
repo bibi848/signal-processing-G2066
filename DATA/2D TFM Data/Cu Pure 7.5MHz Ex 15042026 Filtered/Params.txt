@@ -1,0 +1,26 @@
+For the 2D array measurements, the array is rotated 4 times at each position, using the 
+3D printed guide to ensure measurements are consistent. The array is rotated anti-clockwise each time, when
+looking down at the array from above. The array is moved 2mm between each position. 
+
+# Filtering Parameters
+filter_alpha   = 1.0
+MHz_percentage = 0.8 # percentage
+hanning_bool   = False
+
+# Image Parameters
+c        = 4636.1 # m/s
+z_max    = 15e-3  # m
+z_min    = 35e-3 # m
+x_min    = 'xc_min' # m, can specify length
+x_max    = 'xc_max' # or just use xc_min/xc_max
+y_min    = 'yc_min'
+y_max    = 'yc_max'
+x_pixels = 300
+y_pixels = 300
+z_pixels = 500
+
+X-dir pixel size: 0.039 mm
+Y-dir pixel size: 0.040 mm
+Z-dir pixel size: 0.040 mm
+Centre Frequency:   7.5 MHz
+Wavelength:         0.618 mm
