@@ -31,7 +31,7 @@ from engine.voxel_volume import VoxelVolume3D
 
 from run_engine import scan_volume_3d
 from test_radon_reconstruction import load_and_reconstruct
-from Classes.Reconstruct3D import compute_reconstruction_coords, build_sinograms, view_reconstruction_napari
+from Classes.Reconstruct3D import compute_reconstruction_coords, view_reconstruction_napari
 
 
 # Configuration
@@ -109,12 +109,12 @@ def main() -> None:
         born_threshold=1e-5,
         tfm_z_start=5e-3,
         tfm_z_end=THICKNESS - 5e-3,
-        tfm_n_pixels=300,
+        tfm_n_pixels=400,
     )
 
     # 4. Radon reconstruct
     print("\nReconstructing via inverse Radon...")
-    recon = load_and_reconstruct(OUT_DIR, N_SCANS, filter_name='hann')
+    recon = load_and_reconstruct(OUT_DIR, N_SCANS, filter_name=None)
     print(f"Reconstructed volume shape: {recon.shape}")
 
     # 5. Map reconstruction grid to world coords to locate scatterer slice
@@ -147,7 +147,8 @@ def main() -> None:
         p = os.path.join(OUT_DIR, f'bscan_complex_{i:04d}.npy')
         bscans_list.append(np.load(p))
     bscans = np.stack(bscans_list, axis=0)            # (n_scans, n_z, n_lateral) complex
-    sinos = build_sinograms(bscans)                   # (n_z, n_lateral, n_scans)
+    # Rearrange (n_scans, n_z, n_lateral) → (n_z, n_lateral, n_scans) for per-z indexing
+    sinos = np.transpose(bscans, (1, 2, 0))
 
     # Find depth row nearest to SCAT_Z in the B-scan grid
     n_z_b = bscans.shape[1]
@@ -207,20 +208,16 @@ def main() -> None:
           f"y[{iy}]={y_coords[iy]*1e3:.2f} mm, x[{ix}]={x_coords[ix]*1e3:.2f} mm")
 
     env = np.abs(recon)
-    env_norm = env / (env.max() + 1e-12)
-    env_db = 20.0 * np.log10(env_norm + 1e-12)
-    DB_MIN, DB_MAX = -15.0, 0.0
-
+    vmax = env.max() + 1e-12
 
     # 6. Plot three orthogonal slices through the expected scatterer location
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
 
-    im0 = axes[0].imshow(env_db[iz], cmap='inferno', origin='lower',
-                         vmin=DB_MIN, vmax=DB_MAX,
+    im0 = axes[0].imshow(env[iz], cmap='inferno', origin='lower',
+                         vmin=0, vmax=vmax,
                          extent=[x_coords[0]*1e3, x_coords[-1]*1e3,
                                  y_coords[0]*1e3, y_coords[-1]*1e3])
     axes[0].plot(SCAT_X*1e3, SCAT_Y*1e3, 'c+', markersize=16, markeredgewidth=2)
-    # Overlay r_max valid-reconstruction circle
     circ_phi = np.linspace(0, 2*np.pi, 200)
     axes[0].plot(r_max*np.cos(circ_phi)*1e3, r_max*np.sin(circ_phi)*1e3,
                  'w--', linewidth=1, alpha=0.6, label=f'r_max = {r_max*1e3:.1f} mm')
@@ -228,27 +225,27 @@ def main() -> None:
     axes[0].set_title(f'xy-slice at z = {z_coords[iz]*1e3:.1f} mm')
     axes[0].set_xlabel('x (mm)')
     axes[0].set_ylabel('y (mm)')
-    plt.colorbar(im0, ax=axes[0], label='dB (rel. peak)')
+    plt.colorbar(im0, ax=axes[0], label='amplitude')
 
-    im1 = axes[1].imshow(env_db[:, iy, :], cmap='inferno', origin='upper',
-                         vmin=DB_MIN, vmax=DB_MAX,
+    im1 = axes[1].imshow(env[:, iy, :], cmap='inferno', origin='upper',
+                         vmin=0, vmax=vmax,
                          extent=[x_coords[0]*1e3, x_coords[-1]*1e3,
                                  z_coords[-1]*1e3, z_coords[0]*1e3], aspect='auto')
     axes[1].plot(SCAT_X*1e3, SCAT_Z*1e3, 'c+', markersize=16, markeredgewidth=2)
     axes[1].set_title(f'xz-slice at y = {y_coords[iy]*1e3:.1f} mm')
     axes[1].set_xlabel('x (mm)')
     axes[1].set_ylabel('z (mm)')
-    plt.colorbar(im1, ax=axes[1], label='dB (rel. peak)')
+    plt.colorbar(im1, ax=axes[1], label='amplitude')
 
-    im2 = axes[2].imshow(env_db[:, :, ix], cmap='inferno', origin='upper',
-                         vmin=DB_MIN, vmax=DB_MAX,
+    im2 = axes[2].imshow(env[:, :, ix], cmap='inferno', origin='upper',
+                         vmin=0, vmax=vmax,
                          extent=[y_coords[0]*1e3, y_coords[-1]*1e3,
                                  z_coords[-1]*1e3, z_coords[0]*1e3], aspect='auto')
     axes[2].plot(SCAT_Y*1e3, SCAT_Z*1e3, 'c+', markersize=16, markeredgewidth=2)
     axes[2].set_title(f'yz-slice at x = {x_coords[ix]*1e3:.1f} mm')
     axes[2].set_xlabel('y (mm)')
     axes[2].set_ylabel('z (mm)')
-    plt.colorbar(im2, ax=axes[2], label='dB (rel. peak)')
+    plt.colorbar(im2, ax=axes[2], label='amplitude')
 
     fig.suptitle(
         f'Radon reconstruction of single scatterer at '
@@ -262,7 +259,7 @@ def main() -> None:
     print(f"\nSaved → {out_path}")
 
     # 7. Peak location check
-    peak_idx = np.unravel_index(np.argmax(env_norm), env_norm.shape)
+    peak_idx = np.unravel_index(np.argmax(env), env.shape)
     peak_z = z_coords[peak_idx[0]]
     peak_y = y_coords[peak_idx[1]]
     peak_x = x_coords[peak_idx[2]]
@@ -270,47 +267,39 @@ def main() -> None:
           f"(x={peak_x*1e3:+.2f}, y={peak_y*1e3:+.2f}, z={peak_z*1e3:+.2f}) mm "
           f"(expected ({SCAT_X*1e3:+.2f}, {SCAT_Y*1e3:+.2f}, {SCAT_Z*1e3:+.2f}))")
 
-    # 8. STREAK INTENSITY ANALYSIS — locate where streaks first appear
+    # 8. STREAK INTENSITY ANALYSIS — linear peak-to-streak ratios
     print("\n" + "=" * 70)
-    print("STREAK INTENSITY ANALYSIS (dB below the local peak)")
+    print("STREAK INTENSITY ANALYSIS (linear ratio vs peak)")
     print("=" * 70)
 
-    # Stage 1 — a single raw TFM B-scan (θ=0 is the middle frame)
     i_mid = N_SCANS // 2
-    bscan_mid = bscans[i_mid]                         # complex (n_z, n_lateral)
+    bscan_mid = bscans[i_mid]
     env_b = np.abs(bscan_mid)
     peak_b = env_b.max()
-    # "Off-target" reference: far-from-peak median (noise / PSF tail)
     off_b = np.median(env_b)
     print(f"\n[1] Raw TFM B-scan  (θ=0)")
-    print(f"    peak = {peak_b:.3e}")
-    print(f"    median off-peak = {off_b:.3e}  "
-          f"({20*np.log10(off_b/peak_b):+.1f} dB)")
+    print(f"    peak = {peak_b:.3e}    median off-peak = {off_b:.3e}    "
+          f"ratio = {off_b/max(peak_b,1e-30):.3e}")
 
-    # Stage 2 — sinogram at scatterer depth
     env_s = np.abs(sino_at_z)
     peak_s = env_s.max()
-    # Mask the sine track (within ±2 lateral pixels of theory) and measure off-track
-    L_theory_pix = np.argmin(
-        np.abs(x_img[:, None] - L_theory[None, :]), axis=0)
+    L_theory_pix = np.argmin(np.abs(x_img[:, None] - L_theory[None, :]), axis=0)
     on_track = np.zeros_like(env_s, dtype=bool)
     for j, ip in enumerate(L_theory_pix):
         on_track[max(0, ip - 2):ip + 3, j] = True
     off_track = env_s[~on_track]
     print(f"\n[2] Sinogram at z = {z_img[iz_bscan]*1e3:.1f} mm")
     print(f"    peak on sine track = {peak_s:.3e}")
-    print(f"    median off-track   = {np.median(off_track):.3e}  "
-          f"({20*np.log10(np.median(off_track)/peak_s):+.1f} dB)")
-    print(f"    95th pct off-track = {np.percentile(off_track, 95):.3e}  "
-          f"({20*np.log10(np.percentile(off_track, 95)/peak_s):+.1f} dB)")
+    print(f"    median off-track   = {np.median(off_track):.3e}    "
+          f"ratio = {np.median(off_track)/max(peak_s,1e-30):.3e}")
+    print(f"    95th pct off-track = {np.percentile(off_track, 95):.3e}    "
+          f"ratio = {np.percentile(off_track,95)/max(peak_s,1e-30):.3e}")
 
-    # Stage 3 — reconstruction slice at scatterer depth
     slice_xy = env[iz]
     peak_r = slice_xy.max()
-    # Radial line AWAY from the peak (angle = 45°, skipping the peak itself)
     cy, cx = peak_idx[1], peak_idx[2]
     r_line = np.arange(20, min(slice_xy.shape) // 2)
-    ang_streak = np.deg2rad(135.0)                     # away from peak corner
+    ang_streak = np.deg2rad(135.0)
     yy = (cy + r_line * np.sin(ang_streak)).astype(int)
     xx = (cx + r_line * np.cos(ang_streak)).astype(int)
     ok = (yy >= 0) & (yy < slice_xy.shape[0]) & (xx >= 0) & (xx < slice_xy.shape[1])
@@ -318,60 +307,55 @@ def main() -> None:
     streak_peak = streak_profile.max() if streak_profile.size else 0.0
     print(f"\n[3] Reconstruction slice at z = {z_coords[iz]*1e3:.1f} mm")
     print(f"    recon peak = {peak_r:.3e}")
-    print(f"    max along radial streak (≠ peak) = {streak_peak:.3e}  "
-          f"({20*np.log10(max(streak_peak, 1e-30)/peak_r):+.1f} dB)")
-    print(f"    median streak level = {np.median(streak_profile):.3e}  "
-          f"({20*np.log10(max(np.median(streak_profile), 1e-30)/peak_r):+.1f} dB)")
+    print(f"    max streak = {streak_peak:.3e}    ratio = {streak_peak/max(peak_r,1e-30):.3e}")
+    print(f"    median streak = {np.median(streak_profile):.3e}    "
+          f"ratio = {np.median(streak_profile)/max(peak_r,1e-30):.3e}")
 
-    # Diagnostic figure: peak vs off-peak at each stage, all in dB-relative
+    # Diagnostic figure: linear amplitude at each stage
     fig_d, axd = plt.subplots(1, 3, figsize=(18, 5))
-
-    # 1. B-scan envelope (dB)
-    bdb = 20 * np.log10(env_b / (peak_b + 1e-30) + 1e-12)
-    imA = axd[0].imshow(bdb, aspect='auto', cmap='inferno', vmin=-40, vmax=0,
-                       extent=[x_img[0]*1e3, x_img[-1]*1e3,
-                               z_img[-1]*1e3, z_img[0]*1e3])
-    axd[0].set_title('[1] Raw TFM B-scan (θ=0), dB rel. peak')
+    imA = axd[0].imshow(env_b, aspect='auto', cmap='inferno',
+                        vmin=0, vmax=peak_b,
+                        extent=[x_img[0]*1e3, x_img[-1]*1e3,
+                                z_img[-1]*1e3, z_img[0]*1e3])
+    axd[0].set_title('[1] Raw TFM B-scan (θ=0), linear')
     axd[0].set_xlabel('lateral L (mm)'); axd[0].set_ylabel('z (mm)')
-    plt.colorbar(imA, ax=axd[0], label='dB')
+    plt.colorbar(imA, ax=axd[0], label='amplitude')
 
-    # 2. Sinogram envelope (dB)
-    sdb = 20 * np.log10(env_s / (peak_s + 1e-30) + 1e-12)
-    imB = axd[1].imshow(sdb, aspect='auto', cmap='inferno', vmin=-40, vmax=0,
+    imB = axd[1].imshow(env_s, aspect='auto', cmap='inferno',
+                        vmin=0, vmax=peak_s,
                         extent=[angles_deg[0], angles_deg[-1],
                                 x_img[-1]*1e3, x_img[0]*1e3])
     axd[1].plot(angles_deg, L_theory*1e3, 'c--', lw=1, alpha=0.6)
-    axd[1].set_title('[2] Sinogram at scatterer depth, dB')
+    axd[1].set_title('[2] Sinogram at scatterer depth, linear')
     axd[1].set_xlabel('θ (deg)'); axd[1].set_ylabel('lateral L (mm)')
-    plt.colorbar(imB, ax=axd[1], label='dB')
+    plt.colorbar(imB, ax=axd[1], label='amplitude')
 
-    # 3. Reconstruction xy-slice (dB)
-    rdb = 20 * np.log10(slice_xy / (peak_r + 1e-30) + 1e-12)
-    imC = axd[2].imshow(rdb, cmap='inferno', origin='lower', vmin=-40, vmax=0,
+    imC = axd[2].imshow(slice_xy, cmap='inferno', origin='lower',
+                        vmin=0, vmax=peak_r,
                         extent=[x_coords[0]*1e3, x_coords[-1]*1e3,
                                 y_coords[0]*1e3, y_coords[-1]*1e3])
     axd[2].plot(SCAT_X*1e3, SCAT_Y*1e3, 'c+', ms=14, mew=2)
-    axd[2].set_title('[3] Reconstruction xy-slice, dB rel. peak')
+    axd[2].set_title('[3] Reconstruction xy-slice, linear')
     axd[2].set_xlabel('x (mm)'); axd[2].set_ylabel('y (mm)')
-    plt.colorbar(imC, ax=axd[2], label='dB')
+    plt.colorbar(imC, ax=axd[2], label='amplitude')
 
-    fig_d.suptitle('Streak propagation through the pipeline', fontsize=13)
+    fig_d.suptitle('Streak propagation through the pipeline (linear)', fontsize=13)
     fig_d.tight_layout()
     diag_path = os.path.join(OUT_DIR, 'streak_intensity_stages.png')
     fig_d.savefig(diag_path, dpi=150)
     print(f"\nSaved diagnostic figure → {diag_path}")
 
-    # 9. Interactive 3D view — dB-clipped to match matplotlib display
+    # 9. Interactive 3D view — linear amplitude
     try:
         import napari
         dz = (z_coords[-1] - z_coords[0]) / max(len(z_coords) - 1, 1) * 1e3
         dy = (y_coords[-1] - y_coords[0]) / max(len(y_coords) - 1, 1) * 1e3
         dx = (x_coords[-1] - x_coords[0]) / max(len(x_coords) - 1, 1) * 1e3
-        viewer = napari.Viewer(title='Radon reconstruction (dB)')
+        viewer = napari.Viewer(title='Radon reconstruction (linear)')
         viewer.add_image(
-            env_db, name='Reconstruction (dB)',
+            env, name='Reconstruction',
             scale=(dz, dy, dx), colormap='inferno',
-            contrast_limits=(DB_MIN, DB_MAX),
+            contrast_limits=(0.0, float(vmax)),
         )
         napari.run()
     except ImportError:

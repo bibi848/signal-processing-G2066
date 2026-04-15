@@ -32,18 +32,16 @@ from scipy.stats import pearsonr
 # Allow imports from project root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from Classes.Reconstruct3D import (
-    load_bscans_complex,
     has_complex_bscans,
-    db_to_linear,
-    _apply_lateral_taper,
-    build_sinograms,
-    _subtract_angular_mean,
     reconstruct_volume,
-    reconstruct_volume_complex,
-    _soft_circle_apodise,
-    _circle_mask,
     compute_reconstruction_coords,
 )
+
+
+def _circle_mask(size: int) -> np.ndarray:
+    c = (size - 1) / 2.0
+    y, x = np.ogrid[:size, :size]
+    return (y - c) ** 2 + (x - c) ** 2 <= (size / 2.0) ** 2
 
 # Synthetic data engine
 from engine.geometry import Specimen3D, CylindricalDefect
@@ -54,11 +52,43 @@ from engine.materials import ALUMINUM
 from engine.microstructure import generate_grain_structure, embed_geometric_defects
 from engine.voxel_volume import VoxelVolume3D
 from run_engine import scan_volume_3d
-from reconstruct_3d import (
-    save_ground_truth,
-    load_ground_truth_file,
-    extract_ground_truth_contrast,
-)
+from scipy.ndimage import map_coordinates
+
+
+def save_ground_truth(volume: VoxelVolume3D, path: str) -> None:
+    np.savez_compressed(
+        path,
+        impedance=volume.impedance, wavespeed=volume.wavespeed,
+        voxel_size=np.float64(volume.voxel_size),
+        origin_z=np.float64(volume.origin_z),
+        origin_y=np.float64(volume.origin_y),
+        origin_x=np.float64(volume.origin_x),
+    )
+
+
+def load_ground_truth_file(path: str) -> VoxelVolume3D:
+    d = np.load(path)
+    return VoxelVolume3D(
+        impedance=d['impedance'], wavespeed=d['wavespeed'],
+        voxel_size=float(d['voxel_size']),
+        origin_z=float(d['origin_z']),
+        origin_y=float(d['origin_y']),
+        origin_x=float(d['origin_x']),
+    )
+
+
+def extract_ground_truth_contrast(volume, z_coords, y_coords, x_coords, background_Z):
+    ZZ, YY, XX = np.meshgrid(z_coords, y_coords, x_coords, indexing='ij')
+    iz = (ZZ - volume.origin_z) / volume.voxel_size
+    iy = (YY - volume.origin_y) / volume.voxel_size
+    ix = (XX - volume.origin_x) / volume.voxel_size
+    coords = np.array([iz.ravel(), iy.ravel(), ix.ravel()])
+    bg_Z = float(np.mean(volume.impedance))
+    Z_sampled = map_coordinates(
+        volume.impedance.astype(np.float64), coords,
+        order=1, mode='constant', cval=bg_Z,
+    ).reshape(ZZ.shape)
+    return np.abs((Z_sampled - background_Z) / background_Z).astype(np.float32)
 
 
 # ── Simulation ──────────────────────────────────────────────────────────
@@ -197,66 +227,22 @@ def load_and_reconstruct(
     angles_rad = all_angles_rad[indices]
     angles_deg = np.degrees(angles_rad)
 
-    use_complex = has_complex_bscans(scan_dir)
-
-    if use_complex:
-        # Complex analytic pipeline (matches MATLAB approach):
-        # No taper, no normalisation, no angular mean subtraction.
-        bscans_list = []
-        for i in indices:
-            path = os.path.join(scan_dir, f'bscan_complex_{i:04d}.npy')
-            bscans_list.append(np.load(path))
-        bscans = np.stack(bscans_list, axis=0)  # (n_scans, n_z, n_lateral) complex
-
-        # Global-normalised dB threshold disabled: it creates gaps along the
-        # sinogram sine track at angles where amplitude drops below the
-        # cutoff, producing irregular (clustered) streaks in the FBP output.
-        # env = np.abs(bscans)
-        # global_max = env.max() + 1e-12
-        # db_cutoff = -10.0
-        # threshold = global_max * 10.0 ** (db_cutoff / 20.0)
-        # bscans = bscans * (env >= threshold)
-
-        sinograms = build_sinograms(bscans)
-
-        output_size = sinograms.shape[1]
-        volume = reconstruct_volume_complex(
-            sinograms, angles_deg,
-            filter_name=filter_name, circle=True, output_size=output_size,
-        )
+    if has_complex_bscans(scan_dir):
+        bscans = np.stack([
+            np.load(os.path.join(scan_dir, f'bscan_complex_{i:04d}.npy'))
+            for i in indices
+        ], axis=0)  # (n_scans, n_z, n_lateral) complex
     else:
-        # Fallback: dB amplitude pipeline
-        bscans_list = []
-        for i in indices:
-            path = os.path.join(scan_dir, f'bscan_{i:04d}.npy')
-            bscans_list.append(np.load(path))
-        bscans_db = np.stack(bscans_list, axis=0)
+        bscans_db = np.stack([
+            np.load(os.path.join(scan_dir, f'bscan_{i:04d}.npy'))
+            for i in indices
+        ], axis=0)
+        bscans = np.float32(10.0 ** (bscans_db / 20.0))
 
-        data_fmt = meta.get('data_format', 'db')
-        if data_fmt == 'linear_envelope':
-            bscans_lin = bscans_db.copy()
-        else:
-            bscans_lin = db_to_linear(bscans_db)
-            vmin_db = meta.get('vmin_db', None)
-            if vmin_db is not None:
-                floor = np.float32(10.0 ** (vmin_db / 20.0))
-                bscans_lin = np.maximum(bscans_lin - floor, 0.0)
-
-        bscans_lin = _apply_lateral_taper(bscans_lin, taper_fraction=0.1)
-        global_max = bscans_lin.max()
-        if global_max > 0:
-            bscans_lin /= global_max
-
-        sinograms = build_sinograms(bscans_lin)
-        sinograms = _subtract_angular_mean(sinograms)
-
-        output_size = sinograms.shape[1]
-        volume = reconstruct_volume(
-            sinograms, angles_deg,
-            filter_name=filter_name, circle=True, output_size=output_size,
-        )
-
-    volume = _soft_circle_apodise(volume, rolloff_fraction=0.08)
+    volume = reconstruct_volume(
+        bscans, angles_deg,
+        filter_name=filter_name, circle=True,
+    )
     return volume
 
 
