@@ -33,7 +33,7 @@ from engine.voxel_volume import VoxelVolume3D
 
 import run_engine_3d
 from run_engine_3d import (
-    add_noise, apply_bandpass_filter, reconstruct_tfm_3d,
+    apply_bandpass_filter, reconstruct_tfm_3d,
     load_array_geometry_csv, _infer_pitch,
 )
 
@@ -75,30 +75,28 @@ GRAIN_IMP_VAR      = 0.025
 BORN_THRESHOLD     = 0.005
 
 # TFM
-PROGRAM_LANGUAGE   = "cpp"   # "cpp" or "gpu" 
+PROGRAM_LANGUAGE   = "gpu" # "cpp" or "gpu" 
 RUN_TFM            = True
 X_PIXELS           = 200
 Y_PIXELS           = 200
 Z_PIXELS           = 400
-Z_MIN_MM           = 0.0
+Z_MIN_MM           = 15.0
 Z_MAX_MM           = 35.0
-TFM_DB_RANGE       = 40.0
+TFM_DB_RANGE       = 20.0
 
 # Overlap sweep
-OVERLAPS             = [0.8]
-N_PAIRS_PER_OVERLAP  = 1
-BASE_SEED            = 1000
+OVERLAPS             = [0.9, 0.8, 0.4]
+N_PAIRS_PER_OVERLAP  = 2
+BASE_SEED            = 1
 
-# Array rotations (about its own centre = world origin). 4 → 0°, 90°, 180°, 270°.
-N_ROTATIONS          = 4
+# Array rotations
+ROTATE_SCANS = False
+N_ROTATIONS  = 4
 
-OUTPUT_DIR         = HERE / 'output' / 'engine_3d_overlap_sweep'
+DETERMINISTIC_NOISE = True
+OUTPUT_DIR  = HERE / 'output' / 'engine_3d_overlap_sweep'
 
-
-# =============================================================================
 # Pipeline
-# =============================================================================
-
 
 def _select_tfm_backend(lang: str) -> None:
     """Monkey-patch run_engine_3d so reconstruct_tfm_3d dispatches to the chosen backend."""
@@ -150,6 +148,36 @@ def _rotate_array_cfg(base_cfg: ArrayConfig3D, k: int) -> ArrayConfig3D:
     )
 
 
+def _array_stats(arr: np.ndarray) -> dict:
+    """Small JSON-friendly summary for checking scan strength."""
+    arr64 = arr.astype(np.float64, copy=False)
+    return {
+        'min': float(arr64.min()),
+        'max': float(arr64.max()),
+        'mean_abs': float(np.mean(np.abs(arr64))),
+        'rms': float(np.sqrt(np.mean(arr64 ** 2))),
+    }
+
+
+def _add_noise_reproducible(fmc_data: np.ndarray, snr_db: float,
+                            grain_noise_level: float,
+                            seed: int | None) -> np.ndarray:
+    """Same noise model as run_engine_3d.add_noise, with a local RNG."""
+    signal_power = np.mean(fmc_data ** 2)
+    if signal_power < 1e-30:
+        return fmc_data
+
+    rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
+    noise_std = np.sqrt(signal_power / 10 ** (snr_db / 10))
+    noisy = fmc_data + rng.normal(0, noise_std, fmc_data.shape).astype(np.float32)
+
+    grain = rng.normal(0, grain_noise_level * noise_std, fmc_data.shape)
+    from scipy.ndimage import uniform_filter1d
+    grain = uniform_filter1d(grain, size=5, axis=2).astype(np.float32)
+    noisy += grain
+    return noisy
+
+
 def build_array_config() -> ArrayConfig3D:
     if ARRAY_MODE == "matrix":
         return ArrayConfig3D(
@@ -197,7 +225,8 @@ def build_config(array_cfg: ArrayConfig3D,
 
 
 def scan_one(cfg: SimulationConfig3D, voxel_volume: VoxelVolume3D,
-             tag: str, out_dir: Path, x_half: float, y_half: float) -> None:
+             tag: str, out_dir: Path, x_half: float, y_half: float,
+             noise_seed: int | None = None) -> dict:
     """Run FMC → noise → filter → TFM for a single array position/rotation.
 
     TFM reconstructs in a fixed world box [±x_half, ±y_half] so that every
@@ -216,18 +245,27 @@ def scan_one(cfg: SimulationConfig3D, voxel_volume: VoxelVolume3D,
     fmc = result['fmc_data']
     time_axis = result['time_axis']
     elem_xyz = result['element_positions_xyz']
+    sim_stats = _array_stats(fmc)
 
-    fmc = add_noise(fmc, snr_db=cfg.acquisition.snr_db,
-                    grain_noise_level=cfg.acquisition.grain_noise_level)
+    if cfg.acquisition.add_noise:
+        fmc = _add_noise_reproducible(
+            fmc, snr_db=cfg.acquisition.snr_db,
+            grain_noise_level=cfg.acquisition.grain_noise_level,
+            seed=noise_seed if DETERMINISTIC_NOISE else None,
+        )
+    noisy_stats = _array_stats(fmc)
+
     fmc = apply_bandpass_filter(fmc, cfg.dt, cfg.array.frequency,
                                  bandwidth_fraction=cfg.array.bandwidth,
                                  filter_alpha=cfg.acquisition.filter_alpha,
                                  hanning_bool=cfg.acquisition.hanning_bool)
+    filtered_stats = _array_stats(fmc)
 
     fmc_path = out_dir / f"fmc_{tag}.npy"
     np.save(fmc_path, fmc)
     print(f"    [{tag}] saved FMC {fmc.shape} → {fmc_path.name}")
 
+    tfm_stats = None
     if RUN_TFM:
         z_min = Z_MIN_MM * 1e-3
         z_max = (Z_MAX_MM * 1e-3) if Z_MAX_MM is not None else cfg.specimen.thickness
@@ -242,7 +280,18 @@ def scan_one(cfg: SimulationConfig3D, voxel_volume: VoxelVolume3D,
         )
         vol_path = out_dir / f"volume_{tag}.npy"
         np.save(vol_path, img_db)
+        tfm_stats = _array_stats(img_db)
         print(f"    [{tag}] saved TFM {img_db.shape} → {vol_path.name}")
+
+    return {
+        'tag': tag,
+        'noise_seed': None if not cfg.acquisition.add_noise else noise_seed,
+        'scatterers': int(z_s.size),
+        'fmc_simulated': sim_stats,
+        'fmc_after_noise': noisy_stats,
+        'fmc_after_filter': filtered_stats,
+        'tfm_db': tfm_stats,
+    }
 
 
 def main() -> None:
@@ -250,6 +299,7 @@ def main() -> None:
     array_cfg = build_array_config()
     aperture_x = array_cfg.aperture_x
     aperture_y = max(array_cfg.aperture_y, 1e-3)   # 1D arrays report 0
+    rotation_indices = list(range(N_ROTATIONS)) if ROTATE_SCANS else [0]
     # After rotation the aperture spans max(ap_x, ap_y) along whichever axis
     # the long side has swung to — size the recon box + grain so every
     # rotation fits.
@@ -264,8 +314,8 @@ def main() -> None:
     print(f"# aperture_x = {aperture_x*1e3:.2f} mm, "
           f"aperture_y = {aperture_y*1e3:.2f} mm  (recon side = {L*1e3:.2f} mm)")
     print(f"# overlaps   = {OVERLAPS}")
-    print(f"# rotations  = {N_ROTATIONS}  (angles = "
-          f"{[k*90 for k in range(N_ROTATIONS)]} deg)")
+    print(f"# rotations  = {'on' if ROTATE_SCANS else 'off'}  (angles = "
+          f"{[k*90 for k in rotation_indices]} deg)")
     print(f"# output     = {OUTPUT_DIR}")
     print(f"{'#'*70}")
 
@@ -284,12 +334,6 @@ def main() -> None:
               f"shift={shift*1e3:.2f} mm  "
               f"grain=({grain_width_x*1e3:.1f}×{grain_width_y*1e3:.1f} mm) ──")
 
-        rotated_cfgs = [
-            build_config(_rotate_array_cfg(array_cfg, k),
-                         grain_width_x, grain_width_y)
-            for k in range(N_ROTATIONS)
-        ]
-
         for j in range(N_PAIRS_PER_OVERLAP):
             pair_counter += 1
             seed = BASE_SEED + i * N_PAIRS_PER_OVERLAP + j
@@ -299,6 +343,25 @@ def main() -> None:
             print(f"\n  pair {pair_counter}/{total_pairs}  "
                   f"(overlap={overlap:.2f}, seed={seed}) → {pair_dir.name}")
             t0 = time.time()
+
+            rotated_cfgs = {
+                k: build_config(_rotate_array_cfg(array_cfg, k),
+                                grain_width_x, grain_width_y)
+                for k in rotation_indices
+            }
+            scan_tags = [('A', -shift / 2), ('B', +shift / 2)]
+            tag_index = {tag: n for n, (tag, _) in enumerate(scan_tags)}
+            same_noise_for_ab = np.isclose(shift, 0.0)
+            rotation_noise_offset = {
+                k: seed_offset
+                for seed_offset, k in enumerate(rotation_indices)
+            }
+
+            def noise_seed_for(tag: str, k: int) -> int | None:
+                if not DETERMINISTIC_NOISE:
+                    return None
+                tag_offset = 0 if same_noise_for_ab else tag_index[tag] * 100
+                return int(seed * 1000 + tag_offset + rotation_noise_offset[k])
 
             grain = generate_grain_structure(
                 thickness=SPECIMEN_THICKNESS_MM * 1e-3,
@@ -322,7 +385,8 @@ def main() -> None:
                 origin_x=np.float64(grain.origin_x),
             )
 
-            for tag, dx in [('A', -shift / 2), ('B', +shift / 2)]:
+            scan_diagnostics = []
+            for tag, dx in scan_tags:
                 shifted = VoxelVolume3D(
                     impedance=grain.impedance,
                     wavespeed=grain.wavespeed,
@@ -331,9 +395,12 @@ def main() -> None:
                     origin_y=grain.origin_y,
                     origin_x=grain.origin_x + dx,
                 )
-                for k in range(N_ROTATIONS):
-                    scan_one(rotated_cfgs[k], shifted, f"{tag}_r{k}",
-                             pair_dir, x_half, y_half)
+                for k in rotation_indices:
+                    scan_diagnostics.append(
+                        scan_one(rotated_cfgs[k], shifted, f"{tag}_r{k}",
+                                 pair_dir, x_half, y_half,
+                                 noise_seed=noise_seed_for(tag, k))
+                    )
 
             meta = {
                 'overlap_fraction': float(overlap),
@@ -345,10 +412,13 @@ def main() -> None:
                 'grain_width_x_m': float(grain_width_x),
                 'grain_width_y_m': float(grain_width_y),
                 'seed': int(seed),
-                'n_rotations': int(N_ROTATIONS),
-                'rotation_angles_deg': [k * 90 for k in range(N_ROTATIONS)],
+                'rotate_scans': bool(ROTATE_SCANS),
+                'n_rotations': int(len(rotation_indices)),
+                'rotation_angles_deg': [k * 90 for k in rotation_indices],
+                'deterministic_noise': bool(DETERMINISTIC_NOISE),
                 'tfm_pixels': [Z_PIXELS, Y_PIXELS, X_PIXELS] if RUN_TFM else None,
                 'tfm_z_range_m': [Z_MIN_MM * 1e-3, Z_MAX_MM * 1e-3] if RUN_TFM else None,
+                'scan_diagnostics': scan_diagnostics,
                 'array': {
                     'mode': ARRAY_MODE,
                     'n_elements_x': int(array_cfg.n_elements_x),
