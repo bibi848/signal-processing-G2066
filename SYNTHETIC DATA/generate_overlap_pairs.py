@@ -209,6 +209,40 @@ def _select_tfm_backend(lang: str) -> None:
     run_engine_3d.program_language = lang
 
 
+def _rotate_array_cfg(base_cfg: ArrayConfig3D, k: int) -> ArrayConfig3D:
+    """Rotate element positions by k*90° CCW about world origin (k ∈ {0,1,2,3}).
+
+    Rotating the probe in place is physically equivalent to rotating its element
+    positions about the array centre; the grain stays fixed. Element widths and
+    pitches also swap for odd k (the element's long axis rotates with it).
+    """
+    k = k % 4
+    base_pos = (base_cfg.custom_positions
+                if base_cfg.custom_positions is not None
+                else base_cfg.element_positions()[:, 1:3])
+    if k == 0:
+        rot_pos = base_pos.copy()
+    elif k == 1:
+        rot_pos = np.stack([-base_pos[:, 1], base_pos[:, 0]], axis=1)
+    elif k == 2:
+        rot_pos = -base_pos
+    else:
+        rot_pos = np.stack([base_pos[:, 1], -base_pos[:, 0]], axis=1)
+    swap = (k % 2 == 1)
+    w_x = base_cfg.element_width_y if swap else base_cfg.element_width_x
+    w_y = base_cfg.element_width_x if swap else base_cfg.element_width_y
+    p_x = base_cfg.pitch_y        if swap else base_cfg.pitch_x
+    p_y = base_cfg.pitch_x        if swap else base_cfg.pitch_y
+    return ArrayConfig3D(
+        n_elements_x=rot_pos.shape[0], n_elements_y=1,
+        pitch_x=p_x, pitch_y=p_y,
+        element_width_x=w_x, element_width_y=w_y,
+        frequency=base_cfg.frequency, bandwidth=base_cfg.bandwidth,
+        z_position=base_cfg.z_position,
+        custom_positions=rot_pos,
+    )
+
+
 def build_array_config() -> ArrayConfig3D:
     if ARRAY_MODE == "matrix":
         return ArrayConfig3D(
@@ -365,6 +399,12 @@ def main() -> None:
               f"shift={shift*1e3:.2f} mm  "
               f"grain=({grain_width_x*1e3:.1f}×{grain_width_y*1e3:.1f} mm) ──")
 
+        rotated_cfgs = [
+            build_config(_rotate_array_cfg(array_cfg, k),
+                         grain_width_x, grain_width_y)
+            for k in range(N_ROTATIONS)
+        ]
+
         for j in range(N_PAIRS_PER_OVERLAP):
             pair_counter += 1
             seed = BASE_SEED + i * N_PAIRS_PER_OVERLAP + j
@@ -426,12 +466,9 @@ def main() -> None:
                     origin_y=grain.origin_y,
                     origin_x=grain.origin_x + dx,
                 )
-                for k in rotation_indices:
-                    scan_diagnostics.append(
-                        scan_one(rotated_cfgs[k], shifted, f"{tag}_r{k}",
-                                 pair_dir, x_half, y_half,
-                                 noise_seed=noise_seed_for(tag, k))
-                    )
+                for k in range(N_ROTATIONS):
+                    scan_one(rotated_cfgs[k], shifted, f"{tag}_r{k}",
+                             pair_dir, x_half, y_half)
 
             meta = {
                 'overlap_fraction': float(overlap),
@@ -443,10 +480,8 @@ def main() -> None:
                 'grain_width_x_m': float(grain_width_x),
                 'grain_width_y_m': float(grain_width_y),
                 'seed': int(seed),
-                'rotate_scans': bool(ROTATE_SCANS),
-                'n_rotations': int(len(rotation_indices)),
-                'rotation_angles_deg': [k * 90 for k in rotation_indices],
-                'deterministic_noise': bool(DETERMINISTIC_NOISE),
+                'n_rotations': int(N_ROTATIONS),
+                'rotation_angles_deg': [k * 90 for k in range(N_ROTATIONS)],
                 'tfm_pixels': [Z_PIXELS, Y_PIXELS, X_PIXELS] if RUN_TFM else None,
                 'tfm_z_range_m': [Z_MIN_MM * 1e-3, Z_MAX_MM * 1e-3] if RUN_TFM else None,
                 'scan_diagnostics': scan_diagnostics,
