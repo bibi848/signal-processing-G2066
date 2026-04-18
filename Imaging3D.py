@@ -21,7 +21,7 @@ cwd                  = os.getcwd()
 save_picture         = True
 all_pictures         = True
 filtered_data        = True
-engine               = 'gpu' # cpp / gpu
+engine               = 'cpp' # cpp / gpu
 threads              = 512
 
 if filtered_data:
