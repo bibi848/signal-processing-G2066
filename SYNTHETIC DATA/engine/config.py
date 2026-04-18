@@ -204,10 +204,8 @@ class SimulationConfig:
     acquisition: AcquisitionConfig = field(default_factory=AcquisitionConfig)
     reconstruction: ReconstructionConfig = field(default_factory=ReconstructionConfig)
     scan_plan: Optional[ScanPlanConfig] = None   # None = single 2D scan
-    max_bounces: int = 3
-    mode_conversion: bool = True
-    wall_echoes: bool = True   # If False, skip front/back wall echoes & reverberations
-    gel_thickness: float = 0.075e-3  # Gel layer thickness (m). ~0.05-0.1 mm typical.
+    gel_thickness: float = 0.075e-3  # Gel layer thickness (m). Used for the
+                                     # near-surface dead-zone label only.
 
     def __post_init__(self):
         # Default material: aluminum
@@ -266,8 +264,7 @@ class SimulationConfig:
             f"  Acquisition: {self.acquisition.time_samples} samples @ "
             f"{self.acquisition.sampling_frequency/1e6:.1f} MHz",
             f"  Max depth: {self.material.c_L * self.time_axis[-1] / 2 * 1e3:.1f} mm",
-            f"  Max bounces: {self.max_bounces}, "
-            f"Mode conversion: {self.mode_conversion}",
+            f"  Forward model: Born scatterers only",
         ]
         if self.scan_plan is not None:
             sp = self.scan_plan

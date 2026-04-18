@@ -1002,8 +1002,6 @@ def main():
         specimen=SpecimenConfig(thickness=specimen.thickness, width=specimen.width),
         array=ArrayConfig(num_elements=64, element_pitch=0.6e-3, frequency=frequency),
         scan_plan=scan_plan,
-        max_bounces=2,
-        mode_conversion=False,
     )
     print(cfg.summary())
 
