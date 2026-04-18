@@ -31,6 +31,7 @@ from engine_3d import (
 from engine.microstructure import generate_grain_structure
 from engine.voxel_volume import VoxelVolume3D
 
+import run_engine_3d
 from run_engine_3d import (
     add_noise, apply_bandpass_filter, reconstruct_tfm_3d,
     load_array_geometry_csv, _infer_pitch,
@@ -74,6 +75,7 @@ GRAIN_IMP_VAR      = 0.025
 BORN_THRESHOLD     = 0.005
 
 # TFM
+PROGRAM_LANGUAGE   = "cpp"   # "cpp" or "gpu"  (matches run_engine_3d)
 RUN_TFM            = True
 X_PIXELS           = 200
 Y_PIXELS           = 200
@@ -185,17 +187,13 @@ def scan_one(cfg: SimulationConfig3D, voxel_volume: VoxelVolume3D,
             n_x=X_PIXELS, n_y=Y_PIXELS, n_z=Z_PIXELS,
             db_range=TFM_DB_RANGE,
         )
-        vol_path = out_dir / f"volume_{tag}.npz"
-        np.savez_compressed(
-            vol_path,
-            img_db=img_db,
-            x=axes['x'], y=axes['y'], z=axes['z'],
-            db_range=np.float64(TFM_DB_RANGE),
-        )
+        vol_path = out_dir / f"volume_{tag}.npy"
+        np.save(vol_path, img_db)
         print(f"    [{tag}] saved TFM {img_db.shape} → {vol_path.name}")
 
 
 def main() -> None:
+    _select_tfm_backend(PROGRAM_LANGUAGE)
     array_cfg = build_array_config()
     aperture_x = array_cfg.aperture_x
     aperture_y = max(array_cfg.aperture_y, 1e-3)   # 1D arrays report 0
