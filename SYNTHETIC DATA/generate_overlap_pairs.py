@@ -243,6 +243,36 @@ def _rotate_array_cfg(base_cfg: ArrayConfig3D, k: int) -> ArrayConfig3D:
     )
 
 
+def _array_stats(arr: np.ndarray) -> dict:
+    """Small JSON-friendly summary for checking scan strength."""
+    arr64 = arr.astype(np.float64, copy=False)
+    return {
+        'min': float(arr64.min()),
+        'max': float(arr64.max()),
+        'mean_abs': float(np.mean(np.abs(arr64))),
+        'rms': float(np.sqrt(np.mean(arr64 ** 2))),
+    }
+
+
+def _add_noise_reproducible(fmc_data: np.ndarray, snr_db: float,
+                            grain_noise_level: float,
+                            seed: int | None) -> np.ndarray:
+    """Same noise model as run_engine_3d.add_noise, with a local RNG."""
+    signal_power = np.mean(fmc_data ** 2)
+    if signal_power < 1e-30:
+        return fmc_data
+
+    rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
+    noise_std = np.sqrt(signal_power / 10 ** (snr_db / 10))
+    noisy = fmc_data + rng.normal(0, noise_std, fmc_data.shape).astype(np.float32)
+
+    grain = rng.normal(0, grain_noise_level * noise_std, fmc_data.shape)
+    from scipy.ndimage import uniform_filter1d
+    grain = uniform_filter1d(grain, size=5, axis=2).astype(np.float32)
+    noisy += grain
+    return noisy
+
+
 def build_array_config() -> ArrayConfig3D:
     if ARRAY_MODE == "matrix":
         return ArrayConfig3D(
@@ -399,12 +429,6 @@ def main() -> None:
               f"shift={shift*1e3:.2f} mm  "
               f"grain=({grain_width_x*1e3:.1f}×{grain_width_y*1e3:.1f} mm) ──")
 
-        rotated_cfgs = [
-            build_config(_rotate_array_cfg(array_cfg, k),
-                         grain_width_x, grain_width_y)
-            for k in range(N_ROTATIONS)
-        ]
-
         for j in range(N_PAIRS_PER_OVERLAP):
             pair_counter += 1
             seed = BASE_SEED + i * N_PAIRS_PER_OVERLAP + j
@@ -466,9 +490,12 @@ def main() -> None:
                     origin_y=grain.origin_y,
                     origin_x=grain.origin_x + dx,
                 )
-                for k in range(N_ROTATIONS):
-                    scan_one(rotated_cfgs[k], shifted, f"{tag}_r{k}",
-                             pair_dir, x_half, y_half)
+                for k in rotation_indices:
+                    scan_diagnostics.append(
+                        scan_one(rotated_cfgs[k], shifted, f"{tag}_r{k}",
+                                 pair_dir, x_half, y_half,
+                                 noise_seed=noise_seed_for(tag, k))
+                    )
 
             meta = {
                 'overlap_fraction': float(overlap),
@@ -480,8 +507,10 @@ def main() -> None:
                 'grain_width_x_m': float(grain_width_x),
                 'grain_width_y_m': float(grain_width_y),
                 'seed': int(seed),
-                'n_rotations': int(N_ROTATIONS),
-                'rotation_angles_deg': [k * 90 for k in range(N_ROTATIONS)],
+                'rotate_scans': bool(ROTATE_SCANS),
+                'n_rotations': int(len(rotation_indices)),
+                'rotation_angles_deg': [k * 90 for k in rotation_indices],
+                'deterministic_noise': bool(DETERMINISTIC_NOISE),
                 'tfm_pixels': [Z_PIXELS, Y_PIXELS, X_PIXELS] if RUN_TFM else None,
                 'tfm_z_range_m': [Z_MIN_MM * 1e-3, Z_MAX_MM * 1e-3] if RUN_TFM else None,
                 'scan_diagnostics': scan_diagnostics,
