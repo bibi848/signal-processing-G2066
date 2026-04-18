@@ -12,12 +12,11 @@ ALUMINUM = MaterialProperties(
     c_L=6320.0,      # m/s longitudinal
     c_S=3130.0,      # m/s shear
     density=2700.0,   # kg/m³
-    # Wrought Al 6061-T6 at 5–15 MHz: literature reports α_L in the range
-    # 0.3–1.0 Np/m/MHz (~3–10 dB over 80 mm round-trip). We use 0.5 as a
-    # mid-range value — enough to produce a visible depth gradient without
-    # over-attenuating the back-wall echo.
-    attenuation_L=0.5,   # Np/m/MHz
-    attenuation_S=0.8,   # Np/m/MHz (shear attenuates more)
+    # Bumped from the literature mid-range (0.3–1.0 Np/m/MHz) to give a
+    # stronger depth gradient in TFM images — the lower value left bright
+    # spots near the back wall in coarse-grained Born simulations.
+    attenuation_L=1.5,   # Np/m/MHz
+    attenuation_S=4.5,   # Np/m/MHz (shear attenuates more)
 )
 
 STEEL_MILD = MaterialProperties(
@@ -36,6 +35,17 @@ STEEL_STAINLESS = MaterialProperties(
     density=8000.0,
     attenuation_L=0.06,
     attenuation_S=0.10,
+)
+
+COPPER = MaterialProperties(
+    name="Copper (pure)",
+    c_L=4636.0,      # m/s (measured value from the Cu raw-data params)
+    c_S=2325.0,      # m/s shear
+    density=8960.0,  # kg/m³
+    # Coarse-grained copper scatters strongly at MHz frequencies — keep
+    # attenuation high so Born grain noise has a visible depth decay.
+    attenuation_L=1.0,
+    attenuation_S=4.0,
 )
 
 WATER = MaterialProperties(
@@ -70,7 +80,8 @@ AIR = MaterialProperties(
 )
 
 
-__all__ = ['ALUMINUM', 'STEEL_MILD', 'STEEL_STAINLESS', 'WATER', 'NDT_GEL', 'AIR',
+__all__ = ['ALUMINUM', 'STEEL_MILD', 'STEEL_STAINLESS', 'COPPER',
+           'WATER', 'NDT_GEL', 'AIR',
            'acoustic_impedance', 'wave_speed', 'attenuation_coefficient']
 
 
