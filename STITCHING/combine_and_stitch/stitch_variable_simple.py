@@ -15,19 +15,6 @@ import napari
 class VariableStitcher:
     """
     Tile-based 3D stitching for volumes with shape (z, x, y).
-
-    Main workflow
-    -------------
-    stitcher = VariableStitcher(...)
-    result = stitcher.stitch(vol1, vol2)
-
-    Returned result contains:
-    - best_shift
-    - shifts
-    - corr_values
-    - diagnostics
-    - canvas1
-    - canvas2
     """
 
     axis: str = "x"
@@ -36,10 +23,11 @@ class VariableStitcher:
     grid: Tuple[int, int] = (4, 4)
     adaptive_grid: bool = False
 
-    grid_binary_threshold: float = 0.35
+    grid_binary_threshold: Optional[float] = 0.35
     corr_binary_threshold: Optional[float] = None
 
     ignore_top: int = 0
+    ignore_bottom: int = 0
     min_voxels: int = 10
     tile_multiple: Tuple[float, float] = (2.0, 2.0)
     min_grid: Tuple[int, int] = (4, 4)
@@ -47,18 +35,20 @@ class VariableStitcher:
     opening_structure: Optional[np.ndarray] = None
     size_statistic: str = "median"
 
-    # Stores latest stitch result for convenience
     last_result: Optional[Dict[str, Any]] = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         if self.axis not in ("x", "y"):
             raise ValueError("axis must be 'x' or 'y'")
-
         if self.max_shift < 0:
             raise ValueError("max_shift must be >= 0")
+        if self.ignore_top < 0:
+            raise ValueError("ignore_top must be >= 0")
+        if self.ignore_bottom < 0:
+            raise ValueError("ignore_bottom must be >= 0")
 
-        self._validate_threshold(self.grid_binary_threshold, "grid_binary_threshold")
-
+        if self.grid_binary_threshold is not None:
+            self._validate_threshold(self.grid_binary_threshold, "grid_binary_threshold")
         if self.corr_binary_threshold is not None:
             self._validate_threshold(self.corr_binary_threshold, "corr_binary_threshold")
 
@@ -69,9 +59,6 @@ class VariableStitcher:
     # Public API
     # ================================
     def stitch(self, vol1: np.ndarray, vol2: np.ndarray) -> Dict[str, Any]:
-        """
-        Compute tiled correlation stitch and return full result.
-        """
         vol1 = self._as_float32_3d(vol1, name="vol1")
         vol2 = self._as_float32_3d(vol2, name="vol2")
 
@@ -102,8 +89,11 @@ class VariableStitcher:
         """
         Load two .npy files and stitch them.
         """
-        vol1_path = Path(vol1_path)
-        vol2_path = Path(vol2_path)
+        vol1 = np.load(vol1_path).astype(np.float32)
+        vol2 = np.load(vol2_path).astype(np.float32)
+
+        vol1 = np.transpose(vol1, (0, 2, 1))
+        vol2 = np.transpose(vol2, (0, 2, 1))
 
         if not vol1_path.exists():
             raise FileNotFoundError(f"Could not find: {vol1_path}")
@@ -119,9 +109,6 @@ class VariableStitcher:
         return result
 
     def print_summary(self, result: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Print a compact summary of a stitch result.
-        """
         result = self._get_result(result)
         diagnostics = result["diagnostics"]
 
@@ -145,6 +132,8 @@ class VariableStitcher:
                 f"({gi['representative_size_axis0']:.2f}, {gi['representative_size_axis1']:.2f})"
             )
             print(f"  Tile sizes: ({gi['tile_size_axis0']}, {gi['tile_size_axis1']})")
+            print(f"  Ignore top: {gi['ignore_top']}")
+            print(f"  Ignore bottom: {gi['ignore_bottom']}")
 
     def plot_correlation(self, result: Optional[Dict[str, Any]] = None) -> None:
         result = self._get_result(result)
@@ -211,8 +200,7 @@ class VariableStitcher:
         result: Optional[Dict[str, Any]] = None,
         title: str = "Tiled 3D Stitcher",
         show_binary_masks: bool = True,
-) -> None:
-
+    ) -> None:
         result = self._get_result(result)
 
         canvas1 = self.normalise_for_display(result["canvas1"])
@@ -243,7 +231,6 @@ class VariableStitcher:
                 mask2 = grid_info.get("mask2", None)
 
                 if mask1 is not None and mask2 is not None:
-
                     if self.axis == "x":
                         left_offset = max(0, -best_shift)
 
@@ -315,13 +302,26 @@ class VariableStitcher:
             raise ValueError("No result provided and no previous result stored.")
         return self.last_result
 
+    def _get_z_bounds(self, z_dim: int) -> tuple[int, int]:
+        z_start = min(self.ignore_top, z_dim)
+        z_end = max(z_start, z_dim - min(self.ignore_bottom, z_dim - z_start))
+        return z_start, z_end
+
     # ================================
     # Binary mask and adaptive grid
     # ================================
-    def make_binary_mask(self, vol: np.ndarray, binary_threshold: float, opening_structure=None) -> np.ndarray:
+    def make_binary_mask(
+        self,
+        vol: np.ndarray,
+        binary_threshold: Optional[float],
+        opening_structure=None,
+    ) -> np.ndarray:
         """
-        Create a binary mask from normalized absolute intensity.
+        If binary_threshold is None, returns an all-True mask.
         """
+        if binary_threshold is None:
+            return np.ones_like(vol, dtype=bool)
+
         self._validate_threshold(binary_threshold, "binary_threshold")
 
         v_abs = np.abs(vol)
@@ -342,14 +342,13 @@ class VariableStitcher:
         self,
         binary_vol: np.ndarray,
         ignore_top: int = 0,
+        ignore_bottom: int = 0,
         min_voxels: int = 10,
     ) -> list[dict]:
-        """
-        Measure connected-component extents in 3D binary volume.
-        """
         z_dim = binary_vol.shape[0]
         z_start = min(ignore_top, z_dim)
-        binary_crop = binary_vol[z_start:, :, :]
+        z_end = max(z_start, z_dim - min(ignore_bottom, z_dim - z_start))
+        binary_crop = binary_vol[z_start:z_end, :, :]
 
         labeled, _ = label(binary_crop)
         slices = find_objects(labeled)
@@ -388,12 +387,6 @@ class VariableStitcher:
         vol1: np.ndarray,
         vol2: np.ndarray,
     ) -> tuple[tuple[int, int], dict]:
-        """
-        Estimate adaptive grid using binary masking only.
-
-        For axis='x', the grid is defined in the (z, y) plane.
-        For axis='y', the grid is defined in the (z, x) plane.
-        """
         mask1 = self.make_binary_mask(
             vol1,
             binary_threshold=self.grid_binary_threshold,
@@ -408,11 +401,13 @@ class VariableStitcher:
         sizes1 = self.measure_component_sizes_3D(
             mask1,
             ignore_top=self.ignore_top,
+            ignore_bottom=self.ignore_bottom,
             min_voxels=self.min_voxels,
         )
         sizes2 = self.measure_component_sizes_3D(
             mask2,
             ignore_top=self.ignore_top,
+            ignore_bottom=self.ignore_bottom,
             min_voxels=self.min_voxels,
         )
         all_sizes = sizes1 + sizes2
@@ -423,15 +418,17 @@ class VariableStitcher:
                 "Try lowering grid_binary_threshold or min_voxels."
             )
 
+        z_start_1, z_end_1 = self._get_z_bounds(vol1.shape[0])
+
         if self.axis == "x":
             size0_vals = np.array([s["z_size"] for s in all_sizes], dtype=float)
             size1_vals = np.array([s["y_size"] for s in all_sizes], dtype=float)
-            plane_dim_0 = vol1.shape[0] - min(self.ignore_top, vol1.shape[0])
+            plane_dim_0 = z_end_1 - z_start_1
             plane_dim_1 = vol1.shape[2]
         else:
             size0_vals = np.array([s["z_size"] for s in all_sizes], dtype=float)
             size1_vals = np.array([s["x_size"] for s in all_sizes], dtype=float)
-            plane_dim_0 = vol1.shape[0] - min(self.ignore_top, vol1.shape[0])
+            plane_dim_0 = z_end_1 - z_start_1
             plane_dim_1 = vol1.shape[1]
 
         if self.size_statistic == "mean":
@@ -450,12 +447,16 @@ class VariableStitcher:
         rows = int(np.clip(raw_rows, self.min_grid[0], self.max_grid[0]))
         cols = int(np.clip(raw_cols, self.min_grid[1], self.max_grid[1]))
 
+        z_slice_1 = slice(z_start_1, z_end_1)
+        z_start_2, z_end_2 = self._get_z_bounds(mask2.shape[0])
+        z_slice_2 = slice(z_start_2, z_end_2)
+
         if self.axis == "x":
-            proj1 = np.any(mask1[min(self.ignore_top, mask1.shape[0]):, :, :], axis=1)
-            proj2 = np.any(mask2[min(self.ignore_top, mask2.shape[0]):, :, :], axis=1)
+            proj1 = np.any(mask1[z_slice_1, :, :], axis=1)
+            proj2 = np.any(mask2[z_slice_2, :, :], axis=1)
         else:
-            proj1 = np.any(mask1[min(self.ignore_top, mask1.shape[0]):, :, :], axis=2)
-            proj2 = np.any(mask2[min(self.ignore_top, mask2.shape[0]):, :, :], axis=2)
+            proj1 = np.any(mask1[z_slice_1, :, :], axis=2)
+            proj2 = np.any(mask2[z_slice_2, :, :], axis=2)
 
         info = {
             "grid": (rows, cols),
@@ -473,6 +474,7 @@ class VariableStitcher:
             "mask2": mask2,
             "binary_threshold": self.grid_binary_threshold,
             "ignore_top": self.ignore_top,
+            "ignore_bottom": self.ignore_bottom,
             "min_voxels": self.min_voxels,
             "tile_multiple": self.tile_multiple,
             "size_statistic": self.size_statistic,
@@ -489,12 +491,6 @@ class VariableStitcher:
         vol2: np.ndarray,
         binary_threshold: Optional[float] = None,
     ) -> tuple[int, np.ndarray, np.ndarray]:
-        """
-        Compute normalized cross-correlation between two volumes.
-
-        If binary_threshold is provided, correlation is computed only on voxels
-        where both overlapping regions pass the binary mask.
-        """
         z1, x1, y1 = vol1.shape
         z2, x2, y2 = vol2.shape
 
@@ -582,9 +578,6 @@ class VariableStitcher:
         vol1: np.ndarray,
         vol2: np.ndarray,
     ) -> tuple[int, np.ndarray, np.ndarray, dict]:
-        """
-        Compute normalized cross-correlation tile-by-tile, then combine scores.
-        """
         z1, x1, y1 = vol1.shape
         z2, x2, y2 = vol2.shape
 
@@ -602,12 +595,16 @@ class VariableStitcher:
         tile_peak_map = np.full((rows, cols), np.nan, dtype=float)
         valid_tile_count = 0
 
+        z_start, z_end = self._get_z_bounds(z1)
+        z_usable = z_end - z_start
+
+        if z_usable <= 0:
+            raise ValueError("No usable z slices remain after applying ignore_top and ignore_bottom")
+
         if self.axis == "x":
             if z1 != z2 or y1 != y2:
                 raise ValueError("For x stitching, z and y dimensions must match")
 
-            z_start = min(self.ignore_top, z1)
-            z_usable = z1 - z_start
             tile_z = z_usable // rows
             tile_y = y1 // cols
 
@@ -617,7 +614,7 @@ class VariableStitcher:
             for r in range(rows):
                 for c in range(cols):
                     zs = z_start + r * tile_z
-                    ze = z_start + (r + 1) * tile_z if r < rows - 1 else z1
+                    ze = z_start + (r + 1) * tile_z if r < rows - 1 else z_end
 
                     ys = c * tile_y
                     ye = (c + 1) * tile_y if c < cols - 1 else y1
@@ -644,8 +641,6 @@ class VariableStitcher:
             if z1 != z2 or x1 != x2:
                 raise ValueError("For y stitching, z and x dimensions must match")
 
-            z_start = min(self.ignore_top, z1)
-            z_usable = z1 - z_start
             tile_z = z_usable // rows
             tile_x = x1 // cols
 
@@ -655,7 +650,7 @@ class VariableStitcher:
             for r in range(rows):
                 for c in range(cols):
                     zs = z_start + r * tile_z
-                    ze = z_start + (r + 1) * tile_z if r < rows - 1 else z1
+                    ze = z_start + (r + 1) * tile_z if r < rows - 1 else z_end
 
                     xs = c * tile_x
                     xe = (c + 1) * tile_x if c < cols - 1 else x1
@@ -694,6 +689,8 @@ class VariableStitcher:
             "grid_info": grid_info,
             "corr_binary_threshold": self.corr_binary_threshold,
             "grid_binary_threshold": self.grid_binary_threshold,
+            "ignore_top": self.ignore_top,
+            "ignore_bottom": self.ignore_bottom,
         }
 
         return best_shift, shifts, corr_values, diagnostics
@@ -707,9 +704,6 @@ class VariableStitcher:
         vol2: np.ndarray,
         shift: int,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Place two volumes onto canvases according to the computed shift.
-        """
         z1, x1, y1 = vol1.shape
         z2, x2, y2 = vol2.shape
 
@@ -751,19 +745,30 @@ class VariableStitcher:
 
 # %%
 if __name__ == "__main__":
-    IN_DIR = Path.cwd().parent.parent / "PROCESSING" / "Rotation NPYs"
+    IN_DIR = Path.cwd().parent.parent / "SYNTHETIC DATA" / "engine_3d_overlap_sweep" / "ovlp_095" / "pair_00"
 
-    file_1 = "position_4_fused_mean.npy"
-    file_2 = "position_3_fused_mean.npy"
+    file_1 = "volume_A.npy"
+    file_2 = "volume_B.npy"
+
+    # ================================
+    # EXECUTION SETTINGS
+    # ================================
+    IGNORE_TOP = 30
+    IGNORE_BOTTOM = 15
+
+    # Set either of these to None to disable binary thresholding
+    GRID_BINARY_THRESHOLD = None
+    CORR_BINARY_THRESHOLD = None
 
     stitcher = VariableStitcher(
         axis="x",
-        max_shift=200,
-        grid=(4, 4),
-        adaptive_grid=True,
-        grid_binary_threshold=0.9,
-        corr_binary_threshold=0.9,
-        ignore_top=0,
+        max_shift=100,
+        grid=(20, 20),
+        adaptive_grid=False,
+        grid_binary_threshold=GRID_BINARY_THRESHOLD,
+        corr_binary_threshold=CORR_BINARY_THRESHOLD,
+        ignore_top=IGNORE_TOP,
+        ignore_bottom=IGNORE_BOTTOM,
         min_voxels=50,
         tile_multiple=(1.5, 1.5),
         min_grid=(4, 4),
