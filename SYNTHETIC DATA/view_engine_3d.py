@@ -80,7 +80,9 @@ tfm_entries: list[tuple[str, Path]] = []
 if PAIR_DIR is not None:
     for vp in sorted(list(PAIR_DIR.glob("volume_*.npy"))
                      + list(PAIR_DIR.glob("volume_*.npz"))):
-        tfm_entries.append((vp.stem.split("_")[-1], vp))
+        # Tag is everything after "volume_": e.g. "A" (single scan) or "A_r0"
+        # (rotation-variant). Only the leading A/B letter drives the x-offset.
+        tfm_entries.append((vp.stem[len("volume_"):], vp))
     if not tfm_entries:
         raise SystemExit(f"No volume_*.npy or volume_*.npz found in {PAIR_DIR}")
 elif TFM_NPZ.exists():
@@ -146,7 +148,7 @@ if len(tfm_entries) > 1:
     dx_for_tag = {'A': +shift_m / 2 * 1e3, 'B': -shift_m / 2 * 1e3}
     for tag, path in tfm_entries:
         img, xa, ya, za, dbr = _load_tfm(path, pair_meta)
-        tdx = dx_for_tag.get(tag, 0.0)
+        tdx = dx_for_tag.get(tag[:1], 0.0)
         viewer.add_image(
             img,
             name=f'TFM (dB) — {tag}',
