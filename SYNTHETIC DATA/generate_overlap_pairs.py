@@ -97,7 +97,6 @@ DETERMINISTIC_NOISE = True
 OUTPUT_DIR  = HERE / 'output' / 'engine_3d_overlap_sweep'
 
 # Pipeline
-
 def _select_tfm_backend(lang: str) -> None:
     """Monkey-patch run_engine_3d so reconstruct_tfm_3d dispatches to the chosen backend."""
     if lang not in ("cpp", "gpu"):
@@ -176,6 +175,38 @@ def _add_noise_reproducible(fmc_data: np.ndarray, snr_db: float,
     grain = uniform_filter1d(grain, size=5, axis=2).astype(np.float32)
     noisy += grain
     return noisy
+
+
+def _select_tfm_backend(lang: str) -> None:
+    """Monkey-patch run_engine_3d so reconstruct_tfm_3d dispatches to the chosen backend."""
+    if lang not in ("cpp", "gpu"):
+        raise ValueError(f"PROGRAM_LANGUAGE must be 'cpp' or 'gpu', got {lang!r}")
+    if lang == run_engine_3d.program_language:
+        return
+    if lang == "gpu":
+        gpu_build = HERE_REPO / "build" / "CPP" / "TFM_GPU"
+        if str(gpu_build) not in sys.path:
+            sys.path.insert(0, str(gpu_build))
+        import tfm_gpu
+        run_engine_3d.tfm_gpu = tfm_gpu
+        print("GPU Available (overlap-pairs override)")
+    run_engine_3d.program_language = lang
+
+
+def _select_tfm_backend(lang: str) -> None:
+    """Monkey-patch run_engine_3d so reconstruct_tfm_3d dispatches to the chosen backend."""
+    if lang not in ("cpp", "gpu"):
+        raise ValueError(f"PROGRAM_LANGUAGE must be 'cpp' or 'gpu', got {lang!r}")
+    if lang == run_engine_3d.program_language:
+        return
+    if lang == "gpu":
+        gpu_build = HERE_REPO / "build" / "CPP" / "TFM_GPU"
+        if str(gpu_build) not in sys.path:
+            sys.path.insert(0, str(gpu_build))
+        import tfm_gpu
+        run_engine_3d.tfm_gpu = tfm_gpu
+        print("GPU Available (overlap-pairs override)")
+    run_engine_3d.program_language = lang
 
 
 def build_array_config() -> ArrayConfig3D:
