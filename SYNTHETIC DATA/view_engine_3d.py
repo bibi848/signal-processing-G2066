@@ -6,15 +6,9 @@ Reads the sidecar files written by run_engine_3d.py:
   fmc_3d_tfm.npz    — img_db + (x, y, z) axes
   fmc_3d_grain.npz  — impedance, voxel_size, origin_{z,y,x}  (optional)
 
-Pair mode: if the argument is a directory containing volume_*.npz (as written
-by generate_overlap_pairs.py), all TFM volumes are loaded together. When a
-meta.json with `shift_m` is present, volumes tagged 'A' and 'B' are translated
-by ∓shift/2 in x so the physical overlap is visible in the viewer.
-
-Run:  python "SYNTHETIC DATA/view_engine_3d.py"  [path]
+Run:  python "SYNTHETIC DATA/view_engine_3d.py"
 """
 
-import json
 import sys
 from pathlib import Path
 
@@ -27,70 +21,21 @@ TFM_NPZ   = HERE / "fmc_3d_tfm.npz"
 TFM_NPY   = HERE / "fmc_3d_tfm.npy"         # legacy format
 GRAIN_PATH = HERE / "fmc_3d_grain.npz"
 SCAT_PATH  = HERE / "fmc_3d_scatterers.npz"
-PAIR_DIR: Path | None = None
 
 if len(sys.argv) > 1:
     arg = Path(sys.argv[1])
-    if arg.is_dir():
-        PAIR_DIR = arg
-        GRAIN_PATH = arg / "grain_volume.npz"
-        SCAT_PATH  = arg / "fmc_3d_scatterers.npz"   # unlikely in pair dirs
-    elif arg.suffix == ".npz":
+    if arg.suffix == ".npz":
         TFM_NPZ = arg
-        GRAIN_PATH = arg.with_name(arg.stem.replace("_tfm", "_grain") + ".npz")
-        SCAT_PATH  = arg.with_name(arg.stem.replace("_tfm", "_scatterers") + ".npz")
     else:
         TFM_NPY = arg
-        GRAIN_PATH = arg.with_name(arg.stem.replace("_tfm", "_grain") + ".npz")
-        SCAT_PATH  = arg.with_name(arg.stem.replace("_tfm", "_scatterers") + ".npz")
+    GRAIN_PATH = arg.with_name(arg.stem.replace("_tfm", "_grain") + ".npz")
+    SCAT_PATH  = arg.with_name(arg.stem.replace("_tfm", "_scatterers") + ".npz")
 
-
-def _load_tfm(path: Path, meta: dict | None = None
-              ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
-    """Load a TFM volume. .npz carries axes inline; .npy reconstructs them from meta."""
-    if path.suffix == ".npy":
-        if meta is None:
-            raise SystemExit(f"{path.name} is .npy but no meta.json was loaded")
-        img_db = np.load(path)
-        n_z, n_y, n_x = img_db.shape
-        ap_x = float(meta['aperture_x_m'])
-        ap_y = float(meta.get('aperture_y_m', 1e-3))
-        z_lo, z_hi = meta.get('tfm_z_range_m', [0.0, 35e-3])
-        x_axis = np.linspace(-ap_x / 2, ap_x / 2, n_x)
-        y_axis = np.linspace(-ap_y / 2, ap_y / 2, n_y)
-        z_axis = np.linspace(float(z_lo), float(z_hi), n_z)
-        return img_db, x_axis, y_axis, z_axis, 20.0
-    tfm = np.load(path)
-    return (tfm['img_db'], tfm['x'], tfm['y'], tfm['z'],
-            float(tfm['db_range']) if 'db_range' in tfm.files else 20.0)
-
-
-# Look up meta.json / shift_m first so .npy loaders can reconstruct axes.
-pair_meta: dict | None = None
-shift_m = 0.0
-if PAIR_DIR is not None:
-    meta_path = PAIR_DIR / "meta.json"
-    if meta_path.exists():
-        pair_meta = json.loads(meta_path.read_text())
-        shift_m = float(pair_meta.get("shift_m", 0.0))
-        print(f"Pair shift = {shift_m*1e3:.2f} mm")
-
-# Collect (tag, path) pairs — directory-mode yields several; single-file mode one.
-tfm_entries: list[tuple[str, Path]] = []
-if PAIR_DIR is not None:
-    for vp in sorted(list(PAIR_DIR.glob("volume_*.npy"))
-                     + list(PAIR_DIR.glob("volume_*.npz"))):
-        # Tag is everything after "volume_": e.g. "A" (single scan) or "A_r0"
-        # (rotation-variant). Only the leading A/B letter drives the x-offset.
-        tfm_entries.append((vp.stem[len("volume_"):], vp))
-    if not tfm_entries:
-        raise SystemExit(f"No volume_*.npy or volume_*.npz found in {PAIR_DIR}")
-elif TFM_NPZ.exists():
-    tfm_entries.append(("", TFM_NPZ))
-
-if tfm_entries:
-    # Use the first volume to size napari (all pair volumes share scales/axes).
-    img_db, x_axis, y_axis, z_axis, db_range = _load_tfm(tfm_entries[0][1], pair_meta)
+if TFM_NPZ.exists():
+    tfm = np.load(TFM_NPZ)
+    img_db = tfm['img_db']
+    x_axis, y_axis, z_axis = tfm['x'], tfm['y'], tfm['z']
+    db_range = float(tfm['db_range']) if 'db_range' in tfm.files else 20.0
 elif TFM_NPY.exists():
     # Legacy: reconstruct axes from the run_engine_3d.py defaults (X/Y from
     # the CSV aperture, Z from 0 to Z_MAX_MM).
@@ -142,37 +87,15 @@ if GRAIN_PATH.exists():
 else:
     print(f"No grain sidecar at {GRAIN_PATH} — TFM only.")
 
-if len(tfm_entries) > 1:
-    # Pair mode: shift A by +shift/2 and B by -shift/2 in x so physical
-    # overlap is visible (tag letter drives sign; unknown tags sit at 0).
-    dx_for_tag = {'A': +shift_m / 2 * 1e3, 'B': -shift_m / 2 * 1e3}
-    for tag, path in tfm_entries:
-        img, xa, ya, za, dbr = _load_tfm(path, pair_meta)
-        tdx = dx_for_tag.get(tag[:1], 0.0)
-        viewer.add_image(
-            img,
-            name=f'TFM (dB) — {tag}',
-            scale=(dz, dy, dx),
-            translate=(float(za[0]) * 1e3, float(ya[0]) * 1e3,
-                       float(xa[0]) * 1e3 + tdx),
-            contrast_limits=(-dbr, 0.0),
-            colormap='inferno',
-            rendering='mip',
-            opacity=0.6,
-            blending='additive',
-        )
-        print(f"Loaded TFM {tag}: {img.shape} from {path.name} "
-              f"(x offset = {tdx:+.2f} mm)")
-else:
-    viewer.add_image(
-        img_db,
-        name='3D TFM (dB)',
-        scale=(dz, dy, dx),
-        translate=(tz, ty, tx),
-        contrast_limits=(-db_range, 0.0),
-        colormap='inferno',
-        rendering='mip',
-    )
+viewer.add_image(
+    img_db,
+    name='3D TFM (dB)',
+    scale=(dz, dy, dx),
+    translate=(tz, ty, tx),
+    contrast_limits=(-db_range, 0.0),
+    colormap='inferno',
+    rendering='mip',
+)
 
 if SCAT_PATH.exists():
     s = np.load(SCAT_PATH)
