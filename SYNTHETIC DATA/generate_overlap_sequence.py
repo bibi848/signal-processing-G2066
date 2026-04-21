@@ -70,12 +70,12 @@ MARGIN_MM             = 10.0          # grain padding beyond the scan window
 
 # Grain microstructure
 GRAIN_SIZE_MM      = 0.5
-GRAIN_VOXEL_MM     = 0.5
+GRAIN_VOXEL_MM     = 0.4
 GRAIN_IMP_VAR      = 0.05
 BORN_THRESHOLD     = 0.005
 
 # TFM
-PROGRAM_LANGUAGE   = "gpu"   # "cpp" or "gpu"
+PROGRAM_LANGUAGE   = "cpp"   # "cpp" or "gpu"
 RUN_TFM            = True
 X_PIXELS           = 200
 Y_PIXELS           = 200
@@ -85,10 +85,10 @@ Z_MAX_MM           = 35.0
 TFM_DB_RANGE       = 20.0
 
 # Sequence grid
-OVERLAP            = 0.7
+OVERLAP            = 0.50
 GRID_NX            = 3
 GRID_NY            = 3
-SEED               = 50
+SEED               = 1000
 
 OUTPUT_DIR         = HERE / 'output' / 'engine_3d_overlap_sequence'
 
