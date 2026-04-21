@@ -1,12 +1,18 @@
 '''
-This script goes through the process of measuring, collecting and stitching 
-the backscattering diffraction data from a measured copper sample. 
-Firstly, 5MHz pulses are used on the sample to measure the speed of sound in the 
-block experimentally. 
-Next, the 3D printed guide is placed on the copper sample, to accomodate the 7.5MHz array. 
+This script goes through the process of measuring, collecting and stitching
+the backscattering diffraction data from a measured copper sample.
+Firstly, 5MHz pulses are used on the sample to measure the speed of sound in the
+block experimentally.
+Next, the 3D printed guide is placed on the copper sample, to accomodate the 7.5MHz array.
 Each position is scanned 4 separate times, rotating the 2D array 90 degrees anticlockwise
-each time. 
+each time.
+
+Updated:
+- loops through max, median and mean fusion modes
+- saves fused volumes for each mode
+- shows cross-correlation curves across ALL tested shifts for each mode
 '''
+
 #%%
 # Function Import
 from pathlib import Path
@@ -23,6 +29,7 @@ import pandas as pd
 import numpy as np
 import napari
 import h5py
+import itertools
 
 from Classes.CalcSpeedOfSound import calcSpeedOfSound
 from Classes.Stitch3D import normalised_correlation_3D
@@ -36,18 +43,60 @@ def read_npy(npy):
 def read_png(png):
     return mpimg.imread(IMG_DATA_DIR + '/' + png)
 
+def normalise_volume(vol):
+    vmin, vmax = vol.min(), vol.max()
+    if vmax > vmin:
+        return (vol - vmin) / (vmax - vmin)
+    return np.zeros_like(vol, dtype=np.float32)
+
+def fuse_volumes(volumes, mode):
+    stack = np.stack(volumes, axis=0)
+
+    if mode == 'max':
+        return np.max(stack, axis=0)
+    elif mode == 'median':
+        return np.median(stack, axis=0)
+    elif mode == 'mean':
+        return np.mean(stack, axis=0)
+    else:
+        raise ValueError("mode must be one of: 'max', 'median', 'mean'")
+
+def load_and_align_rotations(position_number, correction_rotations_deg, crop_pixels=40):
+    aligned_volumes = []
+
+    for j in range(4):
+        file_name = f'{position_number}{j+1}_filtered_3D_TFM.npy'
+        file_path = os.path.join(IMG_DATA_DIR, file_name)
+
+        vol = np.load(file_path).astype(np.float32)
+
+        vol_rot = rotate(
+            vol,
+            angle=correction_rotations_deg[j],
+            axes=(1, 2),
+            reshape=False,
+            order=1,
+            mode='constant',
+            cval=0.0
+        ).astype(np.float32)
+
+        vol_rot = vol_rot[:, crop_pixels:-crop_pixels, crop_pixels:-crop_pixels]
+        aligned_volumes.append(vol_rot)
+
+    return aligned_volumes
+
 #%%
 # Extracting Data
 processed_data_type = '2D Processed Data'
 processed_data_name = 'Cu Pure 7.5MHz Ex 15042026'
 imaged_data_name    = '2D TFM Data'
 
-cwd      = Path.cwd().parent
+cwd      = Path.cwd()
 filtered = True
 
 # Input and Output paths.
 PRO_DATA_DIR  = os.path.join(cwd, 'DATA', processed_data_type, (processed_data_name + ' Filtered'))
-IMG_DATA_DIR = os.path.join(cwd, 'DATA', imaged_data_name, (processed_data_name + ' Filtered'))
+IMG_DATA_DIR  = os.path.join(cwd, 'DATA', imaged_data_name, (processed_data_name + ' Filtered'))
 os.makedirs(IMG_DATA_DIR, exist_ok=True)
 
 # Image Folders Available
@@ -110,10 +159,9 @@ y = y - np.mean(y)
 rotations = [0, np.pi/2, np.pi, 3*np.pi/2]
 labels = ['0', '90', '180', '270']
 
-plt.figure(figsize=(6,6))
+plt.figure(figsize=(6, 6))
 
 for theta, label in zip(rotations, labels):
-
     x_rot = x*np.cos(theta) - y*np.sin(theta)
     y_rot = x*np.sin(theta) + y*np.cos(theta)
 
@@ -160,14 +208,15 @@ z_pixel_size = 0.040e-3 # m
 ROTATION_NPY_DIR = os.path.join(Path(__file__).resolve().parent, 'Rotation NPYs')
 os.makedirs(ROTATION_NPY_DIR, exist_ok=True)
 
+fusion_modes = ['max', 'median', 'mean']
+correction_rotations_deg = [0, -90, -180, -270]
+
 #%%
 # Check overlap between two rotations before fusing
 
 position_number = 1
-rotation_a = 1     
-rotation_b = 2     
-
-correction_rotations_deg = [0, -90, -180, -270]
+rotation_a = 1
+rotation_b = 2
 
 file_a = f'{position_number}{rotation_a}_filtered_3D_TFM.npy'
 file_b = f'{position_number}{rotation_b}_filtered_3D_TFM.npy'
@@ -203,22 +252,12 @@ vol_a_rot = vol_a_rot[:, 40:-40, 40:-40]
 vol_b_rot = vol_b_rot[:, 40:-40, 40:-40]
 
 # Normalise for visual comparison
-a_min, a_max = vol_a_rot.min(), vol_a_rot.max()
-b_min, b_max = vol_b_rot.min(), vol_b_rot.max()
-
-if a_max > a_min:
-    vol_a_norm = (vol_a_rot - a_min) / (a_max - a_min)
-else:
-    vol_a_norm = np.zeros_like(vol_a_rot)
-
-if b_max > b_min:
-    vol_b_norm = (vol_b_rot - b_min) / (b_max - b_min)
-else:
-    vol_b_norm = np.zeros_like(vol_b_rot)
+vol_a_norm = normalise_volume(vol_a_rot)
+vol_b_norm = normalise_volume(vol_b_rot)
 
 overlay = np.zeros(vol_a_norm.shape + (3,), dtype=np.float32)
-overlay[..., 0] = vol_a_norm          # red
-overlay[..., 2] = vol_a_norm + vol_b_norm   # blue
+overlay[..., 0] = vol_a_norm
+overlay[..., 2] = vol_b_norm
 overlay = np.clip(overlay, 0, 1)
 
 mip_a = np.max(vol_a_norm, axis=0)
@@ -252,68 +291,46 @@ viewer.add_image(overlay, name='Overlay RGB', rgb=True)
 napari.run()
 
 #%%
-# Fuse each rotation at each position
-correction_rotations_deg = [0, -90, -180, -270]
+# Fuse each rotation at each position for all modes
+number_of_positions = 4
 
-for i in range(4):
-    print(i)
-    aligned_volumes = []
+for mode in fusion_modes:
+    print(f'Fusing mode: {mode}')
 
-    for j in range(4):
+    for i in range(number_of_positions):
+        position_number = i + 1
 
-        file_name = f'{i+1}{j+1}_filtered_3D_TFM.npy'
-        file_path = os.path.join(IMG_DATA_DIR, file_name)
+        aligned_volumes = load_and_align_rotations(
+            position_number=position_number,
+            correction_rotations_deg=correction_rotations_deg,
+            crop_pixels=40
+        )
 
-        vol = np.load(file_path).astype(np.float32)
+        fused_volume = fuse_volumes(aligned_volumes, mode).astype(np.float32)
 
-        vol_rot = rotate(
-            vol,
-            angle=correction_rotations_deg[j],
-            axes=(1, 2),
-            reshape=False,
-            order=1,
-            mode='constant',
-            cval=0.0
-        ).astype(np.float32)
+        save_path = os.path.join(
+            ROTATION_NPY_DIR,
+            f'position_{position_number}_overlay_{mode}_raw.npy'
+        )
+        np.save(save_path, fused_volume)
 
-        vol_rot = vol_rot[:, 40:-40, 40:-40]
-        aligned_volumes.append(vol_rot)
-
-    fused_volume = np.max(np.stack(aligned_volumes, axis=0), axis=0)
-
-    save_path = os.path.join(ROTATION_NPY_DIR, f'position_{i+1}_overlay_max_raw.npy')
-    np.save(save_path, fused_volume)
+        print(f'Saved: {save_path}')
+    print()
 
 #%%
-# Visualise Overlays
-
+# Visualise overlays
 position_number = 3
-aligned_volumes = []
-
-for j in range(4):
-
-    file_name = f'{position_number}{j+1}_filtered_3D_TFM.npy'
-    file_path = os.path.join(IMG_DATA_DIR, file_name)
-
-    vol = np.load(file_path).astype(np.float32)
-
-    vol_rot = rotate(
-        vol,
-        angle=correction_rotations_deg[j],
-        axes=(1, 2),
-        reshape=False,
-        order=1,
-        mode='constant',
-        cval=0.0
-    ).astype(np.float32)
-
-    vol_rot = vol_rot[:, 40:-40, 40:-40]
-    aligned_volumes.append(vol_rot)
-
-fused_volume = np.max(np.stack(aligned_volumes, axis=0), axis=0)
+aligned_volumes = load_and_align_rotations(
+    position_number=position_number,
+    correction_rotations_deg=correction_rotations_deg,
+    crop_pixels=40
+)
 
 viewer = napari.Viewer()
-viewer.add_image(fused_volume, name=f'Position {position_number} fused')
+
+for mode in fusion_modes:
+    fused_volume = fuse_volumes(aligned_volumes, mode).astype(np.float32)
+    viewer.add_image(fused_volume, name=f'Position {position_number} fused {mode}')
 
 for j, vol in enumerate(aligned_volumes):
     viewer.add_image(vol, name=f'Position {position_number} rotation {j+1}')
@@ -321,7 +338,7 @@ for j, vol in enumerate(aligned_volumes):
 napari.run()
 
 #%%
-# Stitch Test
+# Stitch Test: compare all modes and plot full cross-correlation curves for all tested shifts
 
 position_a = 3
 position_b = 4
@@ -331,76 +348,16 @@ max_shift = 100
 if stitch_axis not in ['x', 'y']:
     raise ValueError("stitch_axis must be 'x' or 'y'")
 
-vol_a_path = os.path.join(ROTATION_NPY_DIR, f'position_{position_a}_overlay_max_raw.npy')
-vol_b_path = os.path.join(ROTATION_NPY_DIR, f'position_{position_b}_overlay_max_raw.npy')
-
-vol_a = np.load(vol_a_path).astype(np.float32)
-vol_b = np.load(vol_b_path).astype(np.float32)
-
 pixel_size = x_pixel_size if stitch_axis == 'x' else y_pixel_size
 
-shift, shifts, corr_values = normalised_correlation_3D(
-    vol_a,
-    vol_b,
-    axis=stitch_axis,
-    max_shift=max_shift
-)
+plt.figure(figsize=(10, 6))
 
-canvas_a, canvas_b = stitch_volumes(vol_a, vol_b, shift, axis=stitch_axis)
+for mode in fusion_modes:
+    vol_a_path = os.path.join(ROTATION_NPY_DIR, f'position_{position_a}_overlay_{mode}_raw.npy')
+    vol_b_path = os.path.join(ROTATION_NPY_DIR, f'position_{position_b}_overlay_{mode}_raw.npy')
 
-print(f'Stitch Axis: {stitch_axis}')
-print(f'Pixel Shift: {shift} pixels')
-print(f'Distance Calculated: {shift * pixel_size * 1000:.3f} mm')
-print(f'Absolute Distance: {abs(shift * pixel_size * 1000):.3f} mm')
-
-a_min, a_max = canvas_a.min(), canvas_a.max()
-b_min, b_max = canvas_b.min(), canvas_b.max()
-
-if a_max > a_min:
-    canvas_a_norm = (canvas_a - a_min) / (a_max - a_min)
-else:
-    canvas_a_norm = np.zeros_like(canvas_a)
-
-if b_max > b_min:
-    canvas_b_norm = (canvas_b - b_min) / (b_max - b_min)
-else:
-    canvas_b_norm = np.zeros_like(canvas_b)
-
-viewer = napari.Viewer()
-viewer.add_image(
-    canvas_a_norm,
-    name=f'Position {position_a}',
-    colormap='magenta',
-    blending='additive'
-)
-viewer.add_image(
-    canvas_b_norm,
-    name=f'Position {position_b}',
-    colormap='cyan',
-    blending='additive'
-)
-napari.run()
-
-#%%
-# Find Shifts Between All Positions
-
-stitch_axis = 'x' # x/y
-max_shift = 100
-number_of_positions = 4
-
-pixel_size = x_pixel_size if stitch_axis == 'x' else y_pixel_size
-volumes = []
-
-for i in range(number_of_positions):
-
-    file_path = os.path.join(ROTATION_NPY_DIR, f'position_{i+1}_overlay_max_raw.npy')
-    vol = np.load(file_path).astype(np.float32)
-    volumes.append(vol)
-
-for i in range(number_of_positions - 1):
-
-    vol_a = volumes[i]
-    vol_b = volumes[i+1]
+    vol_a = np.load(vol_a_path).astype(np.float32)
+    vol_b = np.load(vol_b_path).astype(np.float32)
 
     shift, shifts, corr_values = normalised_correlation_3D(
         vol_a,
@@ -409,10 +366,110 @@ for i in range(number_of_positions - 1):
         max_shift=max_shift
     )
 
-    print(f'Positions {i+1} to {i+2}')
+    canvas_a, canvas_b = stitch_volumes(vol_a, vol_b, shift, axis=stitch_axis)
+
+    print(f'Mode: {mode}')
+    print(f'Positions: {position_a} to {position_b}')
     print(f'Stitch Axis: {stitch_axis}')
     print(f'Pixel Shift: {shift} pixels')
     print(f'Distance Calculated: {shift * pixel_size * 1000:.3f} mm')
     print(f'Absolute Distance: {abs(shift * pixel_size * 1000):.3f} mm')
-
+    print(f'Best Correlation: {np.max(corr_values):.5f}')
     print()
+
+    plt.plot(shifts, corr_values, marker='o', markersize=3, label=f'{mode} (best={shift})')
+    plt.axvline(shift, linestyle='--')
+
+    canvas_a_norm = normalise_volume(canvas_a)
+    canvas_b_norm = normalise_volume(canvas_b)
+
+    viewer = napari.Viewer()
+    viewer.add_image(
+        canvas_a_norm,
+        name=f'Position {position_a} {mode}',
+        colormap='magenta',
+        blending='additive'
+    )
+    viewer.add_image(
+        canvas_b_norm,
+        name=f'Position {position_b} {mode}',
+        colormap='cyan',
+        blending='additive'
+    )
+    napari.run()
+
+plt.title(f'Cross-correlation for all tested shifts: positions {position_a} to {position_b}')
+plt.xlabel('Shift [pixels]')
+plt.ylabel('Normalised cross-correlation')
+plt.grid(True)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+#%%
+#%%
+# Find shifts between adjacent positions
+# and plot max vs mean vs median cross-correlation
+
+stitch_axis = 'x'  # 'x' or 'y'
+max_shift = 100
+number_of_positions = 4
+fusion_modes = ['max', 'mean', 'median']
+
+pixel_size = x_pixel_size if stitch_axis == 'x' else y_pixel_size
+
+for i in range(number_of_positions - 1):
+    position_a = i + 1
+    position_b = i + 2
+
+    plt.figure(figsize=(10, 6))
+
+    print('=' * 60)
+    print(f'Positions {position_a} to {position_b}')
+    print('=' * 60)
+
+    for mode in fusion_modes:
+        vol_a_path = os.path.join(
+            ROTATION_NPY_DIR,
+            f'position_{position_a}_overlay_{mode}_raw.npy'
+        )
+        vol_b_path = os.path.join(
+            ROTATION_NPY_DIR,
+            f'position_{position_b}_overlay_{mode}_raw.npy'
+        )
+
+        vol_a = np.load(vol_a_path).astype(np.float32)
+        vol_b = np.load(vol_b_path).astype(np.float32)
+
+        shift, shifts, corr_values = normalised_correlation_3D(
+            vol_a,
+            vol_b,
+            axis=stitch_axis,
+            max_shift=max_shift
+        )
+
+        best_corr = np.max(corr_values)
+
+        print(f'Mode: {mode}')
+        print(f'Pixel Shift: {shift} pixels')
+        print(f'Distance: {shift * pixel_size * 1000:.3f} mm')
+        print(f'Best Correlation: {best_corr:.5f}')
+        print()
+
+        plt.plot(
+            shifts,
+            corr_values,
+            marker='o',
+            markersize=3,
+            label=f'{mode} (shift={shift}, corr={best_corr:.4f})'
+        )
+
+        plt.axvline(shift, linestyle='--', alpha=0.7)
+
+    plt.title(f'Cross-correlation vs shift: positions {position_a} to {position_b}')
+    plt.xlabel('Shift [pixels]')
+    plt.ylabel('Normalised cross-correlation')
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
