@@ -1,0 +1,52 @@
+Copper Experiment on Pure Sample with Automated Gantry
+2D Array: Imasonic 7.5MHz 128 els 2D sparse/random
+
+FMC
+Sample frequency: 50MHz
+Time points: 1200
+Gain: 70dB
+Averages: 64
+
+6 scans each with no rotation. 
+
+positions scanned were (from bird's eye view)
+
+Group 1 (r1x) uses 2mm moves. 
+6	5	4
+1	2	3
+
+Group 2 (r2x) uses 3mm moves.
+6	1
+5	2
+4	3
+
+Filter Parameters
+crop_data           = True
+crop_amount         = 1200
+
+filter_alpha   = 1.0
+MHz_percentage = 0.8 # percentage
+hanning_bool   = False
+
+
+Image Parameters:
+
+vmax = 0.0
+vmin = -20.0
+c        = 4636.1 # m/s
+z_max    = 15e-3  # m
+z_min    = 35e-3 # m
+x_min    = 'xc_min' # m, can specify length
+x_max    = 'xc_max' # or just use xc_min/xc_max
+y_min    = 'yc_min'
+y_max    = 'yc_max'
+x_pixels = 300
+y_pixels = 300
+z_pixels = 500
+
+Time to process 12 images: 676.160509s
+X-dir pixel size: 0.039 mm
+Y-dir pixel size: 0.040 mm
+Z-dir pixel size: 0.040 mm
+Centre Frequency:   7.5 MHz
+Wavelength:         0.618 mm
