@@ -578,10 +578,10 @@ def plot_tile_signal_alignment(v1, v2, diagnostics, num_tiles=5):
 # 3. STANDALONE STITCHER EXECUTION
 # ==========================================
 if __name__ == "__main__":
-    IN_DIR = Path.cwd() / "DATA" / "2D TFM Data" / "FeC Smile 3MHz 04022026 Filtered"
+    IN_DIR = Path.cwd() / "PROCESSING" / "Rotation NPYs" 
 
-    vol1_raw = np.load(IN_DIR / "FeC_40_2_filtered_3D_TFM.npy")
-    vol2_raw = np.load(IN_DIR / "FeC_40_3_filtered_3D_TFM.npy")
+    vol1_raw = np.load(IN_DIR / "position_1_fused_max.npy")
+    vol2_raw = np.load(IN_DIR / "position_2_fused_max.npy")
 
     stitch_shift, v1_thresholded, v2_thresholded, diagnostics = run_stitcher_test(
         vol1_raw,

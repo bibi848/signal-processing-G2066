@@ -37,13 +37,13 @@ USE_IGNORE_Z = True
 IGNORE_TOP = 15
 IGNORE_BOTTOM = 10 
 
-USE_CORR_BINARY_MASK = True
+USE_CORR_BINARY_MASK = False
 CORR_BINARY_THRESHOLD = 0.93
 
 USE_TILED_CORRELATION = True
 GRID = (15, 15)
 
-USE_ADAPTIVE_GRID = True
+USE_ADAPTIVE_GRID = False
 GRID_BINARY_THRESHOLD = CORR_BINARY_THRESHOLD
 MIN_VOXELS = 25
 TILE_MULTIPLE = (1.5, 1.5)
@@ -519,7 +519,109 @@ def run_correlation(
 
     return best_shift, shifts, corr_values, diagnostics
 
+def robust_normalise_1d(arr: np.ndarray) -> np.ndarray:
+    arr = np.asarray(arr, dtype=float)
+    lo, hi = np.percentile(arr, [1, 99])
+    if hi <= lo:
+        return np.zeros_like(arr, dtype=float)
+    out = (arr - lo) / (hi - lo)
+    return np.clip(out, 0, 1)
 
+
+def make_axis_profile(
+    vol: np.ndarray,
+    axis: str = "x",
+    ignore_top: int = 0,
+    ignore_bottom: int = 0,
+    use_abs: bool = True,
+    reduction: str = "mean",
+) -> np.ndarray:
+    """
+    Reduce a 3D volume to a 1D profile along the stitch axis.
+
+    For axis='x':
+        input volume shape is (z, x, y)
+        profile length is x
+        reduces over z and y
+
+    For axis='y':
+        profile length is y
+        reduces over z and x
+    """
+    z_start, z_end = get_z_bounds(vol.shape[0], ignore_top=ignore_top, ignore_bottom=ignore_bottom)
+    v = vol[z_start:z_end]
+
+    if use_abs:
+        v = np.abs(v)
+
+    if axis == "x":
+        reduce_axes = (0, 2)   # average over z and y -> profile over x
+    elif axis == "y":
+        reduce_axes = (0, 1)   # average over z and x -> profile over y
+    else:
+        raise ValueError("axis must be 'x' or 'y'")
+
+    if reduction == "max":
+        profile = np.max(v, axis=reduce_axes)
+    else:
+        profile = np.mean(v, axis=reduce_axes)
+
+    return np.asarray(profile, dtype=float)
+
+
+def plot_shifted_profiles(
+    vol_a: np.ndarray,
+    vol_b: np.ndarray,
+    best_shift: float,
+    expected_shift: float | None = None,
+    axis: str = "x",
+    ignore_top: int = 0,
+    ignore_bottom: int = 0,
+    use_abs: bool = True,
+    reduction: str = "mean",
+    title: str = "",
+):
+    """
+    Plot 1D intensity profiles for A and B, with B shifted by best_shift.
+    """
+    profile_a = make_axis_profile(
+        vol_a,
+        axis=axis,
+        ignore_top=ignore_top,
+        ignore_bottom=ignore_bottom,
+        use_abs=use_abs,
+        reduction=reduction,
+    )
+    profile_b = make_axis_profile(
+        vol_b,
+        axis=axis,
+        ignore_top=ignore_top,
+        ignore_bottom=ignore_bottom,
+        use_abs=use_abs,
+        reduction=reduction,
+    )
+
+    profile_a = robust_normalise_1d(profile_a)
+    profile_b = robust_normalise_1d(profile_b)
+
+    x_a = np.arange(len(profile_a), dtype=float)
+    x_b = np.arange(len(profile_b), dtype=float) + float(best_shift)
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(x_a, profile_a, label="A profile", linewidth=2)
+    plt.plot(x_b, profile_b, label=f"B profile shifted by {best_shift:.1f}px", linewidth=2, alpha=0.85)
+
+    plt.axvline(float(best_shift), linestyle="--", linewidth=1.5, label=f"Best shift = {best_shift:.1f}")
+    if expected_shift is not None:
+        plt.axvline(float(expected_shift), linestyle=":", linewidth=1.5, label=f"Expected shift = {expected_shift:.1f}")
+
+    plt.xlabel(f"{axis}-coordinate (pixels)")
+    plt.ylabel("Normalised intensity")
+    plt.title(title if title else "Shifted intensity profiles")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
 # ============================================================
 # LOAD DATA
 # ============================================================

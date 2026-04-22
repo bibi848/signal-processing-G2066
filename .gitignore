@@ -18,3 +18,5 @@ slices
 *.md
 Rotation NPYs
 combine_and_stitch
+correlation_exports
+old_validation
