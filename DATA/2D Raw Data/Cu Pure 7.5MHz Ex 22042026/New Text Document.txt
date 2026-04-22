@@ -1,0 +1,21 @@
+Copper Experiment on Pure Sample with Automated Gantry
+2D Array: Imasonic 7.5MHz 128 els 2D sparse/random
+
+FMC
+Sample frequency: 50MHz
+Time points: 1200
+Gain: 70dB
+Averages: 64
+
+6 scans each with no rotation. 
+
+positions scanned were (from bird's eye view)
+
+Group 1 (r1x) uses 2mm moves. 
+6	5	4
+1	2	3
+
+Group 2 (r2x) uses 3mm moves.
+6	1
+5	2
+4	3
