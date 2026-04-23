@@ -93,6 +93,12 @@ BASE_SEED            = 1
 ROTATE_SCANS = False
 N_ROTATIONS  = 4
 
+# Simulated misalignment between A and B arrays — small rotation of B (deg).
+# Every angle in this list is swept: one dataset is generated per (overlap,
+# misalignment, pair) combination. Use [0.0] to disable, or e.g. [1, 2, 3, 4, 5]
+# to sweep. Positive = CCW (looking down the +z axis).
+MISALIGN_DEGREES_B   = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+
 DETERMINISTIC_NOISE = True
 OUTPUT_DIR  = HERE / 'output' / 'engine_3d_overlap_sweep'
 
@@ -142,6 +148,37 @@ def _rotate_array_cfg(base_cfg: ArrayConfig3D, k: int) -> ArrayConfig3D:
         n_elements_x=rot_pos.shape[0], n_elements_y=1,
         pitch_x=p_x, pitch_y=p_y,
         element_width_x=w_x, element_width_y=w_y,
+        frequency=base_cfg.frequency, bandwidth=base_cfg.bandwidth,
+        z_position=base_cfg.z_position,
+        custom_positions=rot_pos,
+    )
+
+
+def _mis_dirname(angle_deg: float) -> str:
+    """Filesystem-safe directory label for a misalignment angle (e.g. 'mis_+03.0')."""
+    return f"mis_{angle_deg:+05.1f}"
+
+
+def _rotate_array_cfg_small(base_cfg: ArrayConfig3D, angle_deg: float) -> ArrayConfig3D:
+    """Rotate element positions by `angle_deg` CCW about the array centre.
+
+    For small rotations (<~10°) element widths and pitches are preserved: the
+    directivity pattern's effective aperture only changes by cos(angle) ≈ 1.
+    """
+    if abs(angle_deg) < 1e-9:
+        return base_cfg
+    base_pos = (base_cfg.custom_positions
+                if base_cfg.custom_positions is not None
+                else base_cfg.element_positions()[:, 1:3])
+    theta = np.deg2rad(angle_deg)
+    c, s = np.cos(theta), np.sin(theta)
+    R = np.array([[c, -s], [s, c]])
+    rot_pos = base_pos @ R.T
+    return ArrayConfig3D(
+        n_elements_x=rot_pos.shape[0], n_elements_y=1,
+        pitch_x=base_cfg.pitch_x, pitch_y=base_cfg.pitch_y,
+        element_width_x=base_cfg.element_width_x,
+        element_width_y=base_cfg.element_width_y,
         frequency=base_cfg.frequency, bandwidth=base_cfg.bandwidth,
         z_position=base_cfg.z_position,
         custom_positions=rot_pos,
@@ -316,11 +353,12 @@ def main() -> None:
     print(f"# overlaps   = {OVERLAPS}")
     print(f"# rotations  = {'on' if ROTATE_SCANS else 'off'}  (angles = "
           f"{[k*90 for k in rotation_indices]} deg)")
+    print(f"# misalign   = {MISALIGN_DEGREES_B} deg (applied to B)")
     print(f"# output     = {OUTPUT_DIR}")
     print(f"{'#'*70}")
 
-    total_pairs = len(OVERLAPS) * N_PAIRS_PER_OVERLAP
-    pair_counter = 0
+    total_datasets = len(OVERLAPS) * N_PAIRS_PER_OVERLAP * len(MISALIGN_DEGREES_B)
+    dataset_counter = 0
 
     for i, overlap in enumerate(OVERLAPS):
         shift = aperture_x * (1.0 - overlap)
@@ -335,22 +373,19 @@ def main() -> None:
               f"grain=({grain_width_x*1e3:.1f}×{grain_width_y*1e3:.1f} mm) ──")
 
         for j in range(N_PAIRS_PER_OVERLAP):
-            pair_counter += 1
             seed = BASE_SEED + i * N_PAIRS_PER_OVERLAP + j
             pair_dir = overlap_dir / f"pair_{j:02d}"
             pair_dir.mkdir(parents=True, exist_ok=True)
 
-            print(f"\n  pair {pair_counter}/{total_pairs}  "
+            print(f"\n  pair {j+1}/{N_PAIRS_PER_OVERLAP}  "
                   f"(overlap={overlap:.2f}, seed={seed}) → {pair_dir.name}")
-            t0 = time.time()
 
-            rotated_cfgs = {
+            rotated_cfgs_A = {
                 k: build_config(_rotate_array_cfg(array_cfg, k),
                                 grain_width_x, grain_width_y)
                 for k in rotation_indices
             }
-            scan_tags = [('A', -shift / 2), ('B', +shift / 2)]
-            tag_index = {tag: n for n, (tag, _) in enumerate(scan_tags)}
+            tag_index = {'A': 0, 'B': 1}
             same_noise_for_ab = np.isclose(shift, 0.0)
             rotation_noise_offset = {
                 k: seed_offset
@@ -363,6 +398,7 @@ def main() -> None:
                 tag_offset = 0 if same_noise_for_ab else tag_index[tag] * 100
                 return int(seed * 1000 + tag_offset + rotation_noise_offset[k])
 
+            # --- Grain volume: shared across every misalignment for this pair
             grain = generate_grain_structure(
                 thickness=SPECIMEN_THICKNESS_MM * 1e-3,
                 width=grain_width_x,
@@ -385,58 +421,97 @@ def main() -> None:
                 origin_x=np.float64(grain.origin_x),
             )
 
-            scan_diagnostics = []
-            for tag, dx in scan_tags:
-                shifted = VoxelVolume3D(
-                    impedance=grain.impedance,
-                    wavespeed=grain.wavespeed,
-                    voxel_size=grain.voxel_size,
-                    origin_z=grain.origin_z,
-                    origin_y=grain.origin_y,
-                    origin_x=grain.origin_x + dx,
+            # --- Scan A: reference, independent of misalignment — saved at pair_dir
+            shifted_A = VoxelVolume3D(
+                impedance=grain.impedance,
+                wavespeed=grain.wavespeed,
+                voxel_size=grain.voxel_size,
+                origin_z=grain.origin_z,
+                origin_y=grain.origin_y,
+                origin_x=grain.origin_x - shift / 2,
+            )
+            scan_diagnostics_A = []
+            for k in rotation_indices:
+                scan_diagnostics_A.append(
+                    scan_one(rotated_cfgs_A[k], shifted_A, f"A_r{k}",
+                             pair_dir, x_half, y_half,
+                             noise_seed=noise_seed_for('A', k))
                 )
+
+            # --- Scan B: per-misalignment subdirectory
+            shifted_B = VoxelVolume3D(
+                impedance=grain.impedance,
+                wavespeed=grain.wavespeed,
+                voxel_size=grain.voxel_size,
+                origin_z=grain.origin_z,
+                origin_y=grain.origin_y,
+                origin_x=grain.origin_x + shift / 2,
+            )
+            for misalign_deg in MISALIGN_DEGREES_B:
+                dataset_counter += 1
+                misalign_deg = float(misalign_deg)
+                mis_dir = pair_dir / _mis_dirname(misalign_deg)
+                mis_dir.mkdir(parents=True, exist_ok=True)
+
+                print(f"\n    dataset {dataset_counter}/{total_datasets}  "
+                      f"B_misalign={misalign_deg:+.2f}° → {mis_dir.name}")
+                t0 = time.time()
+
+                rotated_cfgs_B = {
+                    k: build_config(
+                        _rotate_array_cfg_small(_rotate_array_cfg(array_cfg, k),
+                                                misalign_deg),
+                        grain_width_x, grain_width_y)
+                    for k in rotation_indices
+                }
+                scan_diagnostics_B = []
                 for k in rotation_indices:
-                    scan_diagnostics.append(
-                        scan_one(rotated_cfgs[k], shifted, f"{tag}_r{k}",
-                                 pair_dir, x_half, y_half,
-                                 noise_seed=noise_seed_for(tag, k))
+                    scan_diagnostics_B.append(
+                        scan_one(rotated_cfgs_B[k], shifted_B, f"B_r{k}",
+                                 mis_dir, x_half, y_half,
+                                 noise_seed=noise_seed_for('B', k))
                     )
 
-            meta = {
-                'overlap_fraction': float(overlap),
-                'pair_index': int(j),
-                'shift_m': float(shift),
-                'aperture_x_m': float(array_cfg.aperture_x),
-                'aperture_y_m': float(array_cfg.aperture_y),
-                'recon_half_extent_m': float(x_half),
-                'grain_width_x_m': float(grain_width_x),
-                'grain_width_y_m': float(grain_width_y),
-                'seed': int(seed),
-                'rotate_scans': bool(ROTATE_SCANS),
-                'n_rotations': int(len(rotation_indices)),
-                'rotation_angles_deg': [k * 90 for k in rotation_indices],
-                'deterministic_noise': bool(DETERMINISTIC_NOISE),
-                'tfm_pixels': [Z_PIXELS, Y_PIXELS, X_PIXELS] if RUN_TFM else None,
-                'tfm_z_range_m': [Z_MIN_MM * 1e-3, Z_MAX_MM * 1e-3] if RUN_TFM else None,
-                'scan_diagnostics': scan_diagnostics,
-                'array': {
-                    'mode': ARRAY_MODE,
-                    'n_elements_x': int(array_cfg.n_elements_x),
-                    'n_elements_y': int(array_cfg.n_elements_y),
-                    'pitch_x_m': float(array_cfg.pitch_x),
-                    'pitch_y_m': float(array_cfg.pitch_y),
-                    'frequency_Hz': float(array_cfg.frequency),
-                },
-                'material': MATERIAL.name,
-            }
-            with open(pair_dir / 'meta.json', 'w') as f:
-                json.dump(meta, f, indent=2)
+                meta = {
+                    'overlap_fraction': float(overlap),
+                    'pair_index': int(j),
+                    'shift_m': float(shift),
+                    'aperture_x_m': float(array_cfg.aperture_x),
+                    'aperture_y_m': float(array_cfg.aperture_y),
+                    'recon_half_extent_m': float(x_half),
+                    'grain_width_x_m': float(grain_width_x),
+                    'grain_width_y_m': float(grain_width_y),
+                    'seed': int(seed),
+                    'rotate_scans': bool(ROTATE_SCANS),
+                    'n_rotations': int(len(rotation_indices)),
+                    'rotation_angles_deg': [k * 90 for k in rotation_indices],
+                    'deterministic_noise': bool(DETERMINISTIC_NOISE),
+                    'misalign_deg_B': float(misalign_deg),
+                    'scan_A_dir': '..',
+                    'grain_volume_path': '../grain_volume.npz',
+                    'tfm_pixels': [Z_PIXELS, Y_PIXELS, X_PIXELS] if RUN_TFM else None,
+                    'tfm_z_range_m': [Z_MIN_MM * 1e-3, Z_MAX_MM * 1e-3] if RUN_TFM else None,
+                    'scan_diagnostics_A': scan_diagnostics_A,
+                    'scan_diagnostics_B': scan_diagnostics_B,
+                    'array': {
+                        'mode': ARRAY_MODE,
+                        'n_elements_x': int(array_cfg.n_elements_x),
+                        'n_elements_y': int(array_cfg.n_elements_y),
+                        'pitch_x_m': float(array_cfg.pitch_x),
+                        'pitch_y_m': float(array_cfg.pitch_y),
+                        'frequency_Hz': float(array_cfg.frequency),
+                    },
+                    'material': MATERIAL.name,
+                }
+                with open(mis_dir / 'meta.json', 'w') as f:
+                    json.dump(meta, f, indent=2)
 
-            print(f"  pair done in {time.time() - t0:.1f}s")
+                print(f"    dataset done in {time.time() - t0:.1f}s")
 
     print(f"\n{'#'*70}")
-    print(f"# SWEEP COMPLETE — {total_pairs} pair(s) "
-          f"({len(OVERLAPS)} overlap × {N_PAIRS_PER_OVERLAP}) in {OUTPUT_DIR}")
+    print(f"# SWEEP COMPLETE — {total_datasets} dataset(s) "
+          f"({len(OVERLAPS)} overlap × {N_PAIRS_PER_OVERLAP} pair × "
+          f"{len(MISALIGN_DEGREES_B)} misalign) in {OUTPUT_DIR}")
     print(f"{'#'*70}\n")
 
 
