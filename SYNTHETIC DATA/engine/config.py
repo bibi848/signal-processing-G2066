@@ -172,24 +172,28 @@ class ScanPlanConfig:
 
     Attributes:
         n_scans:      Number of angular frames to acquire
-        theta_start:  First angle (rad).  Default −π/2  (array along −y)
-        theta_end:    Last  angle (rad).  Default +π/2  (array along +y)
+        theta_start:  First angle (rad).  Default 0.
+        theta_end:    Exclusive end angle (rad).  Default π.
+                      For a 1D (symmetric) array, [0, π) covers all unique
+                      projection directions — angles θ and θ+π give the same
+                      line integrals up to an s-flip.
     """
     n_scans:     int   = 32
-    theta_start: float = -np.pi / 2   # rad
-    theta_end:   float =  np.pi / 2   # rad
+    theta_start: float = 0.0          # rad
+    theta_end:   float = np.pi        # rad (exclusive)
 
     @property
     def angles(self) -> 'np.ndarray':
-        """Rotation angles (rad) for each frame."""
-        return np.linspace(self.theta_start, self.theta_end, self.n_scans)
+        """Rotation angles (rad) for each frame. Endpoint excluded."""
+        return np.linspace(self.theta_start, self.theta_end,
+                           self.n_scans, endpoint=False)
 
     @property
     def angle_step(self) -> float:
         """Angular step between frames (rad)."""
-        if self.n_scans < 2:
+        if self.n_scans < 1:
             return 0.0
-        return float((self.theta_end - self.theta_start) / (self.n_scans - 1))
+        return float((self.theta_end - self.theta_start) / self.n_scans)
 
 
 @dataclass

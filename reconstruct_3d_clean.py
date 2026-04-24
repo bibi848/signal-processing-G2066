@@ -51,24 +51,26 @@ from skimage.transform import iradon
 class ReconConfig:
     """Parameters controlling the reconstruction pipeline."""
 
-    filter_name: str = 'shepp-logan'
+    filter_name: str = 'ramp'
     """FBP filter for iradon. Options: 'ramp', 'shepp-logan', 'hamming', 'hann'.
-    'shepp-logan' matches the MATLAB default."""
+    'ramp' is the pure |ω| filter from the paper (Driver 2024, eq. 16)."""
 
-    circle: bool = False
-    """If True, iradon assumes projections cover only the inscribed circle.
-    False (default) matches MATLAB behaviour — full square output."""
+    circle: bool = True
+    """If True, iradon limits the reconstruction to the inscribed circle.
+    Only the inscribed circle contains valid information — corners contain
+    backprojection artifacts."""
 
     output_size: Optional[int] = None
     """Side length of the reconstructed x-y grid. Default: auto from iradon."""
 
     taper_fraction: float = 0.0
     """Fraction of each lateral edge tapered to zero (Tukey window).
-    0.0 = disabled (matches MATLAB). Set >0 only if edge artifacts appear."""
+    Set >0 only if edge artifacts appear."""
 
-    subtract_angular_mean: bool = False
+    subtract_angular_mean: bool = True
     """If True, subtract the mean across angles from each sinogram row.
-    Off by default (matches MATLAB)."""
+    Removes rotationally symmetric features (wall echoes) that would
+    otherwise appear as ring artifacts around the rotation axis."""
 
     rolloff_fraction: float = 0.0
     """Circle apodisation rolloff. 0.0 = disabled (matches MATLAB).
@@ -413,7 +415,7 @@ def reconstruct_volume(
             sino = sino - sino.mean(axis=1, keepdims=True)
 
         if is_complex:
-            # Match MATLAB: iradon(real) + 1j * iradon(imag)
+            # iradon(real) + 1j * iradon(imag) — iradon is linear
             recon_re = iradon(
                 sino.real.astype(np.float64),
                 theta=angles_deg,
@@ -437,6 +439,10 @@ def reconstruct_volume(
                 circle=config.circle,
                 output_size=output_size,
             ).astype(np.float32)
+
+        # iradon returns image-convention rows (y-decreasing-downward);
+        # flip axis 0 so axis 1 of the volume matches ascending y_coords.
+        recon_slice = recon_slice[::-1, :]
 
         # Allocate volume on first slice (Ny determined by iradon)
         if volume is None:
@@ -900,7 +906,7 @@ def generate_synthetic_bscans(
 
     Args:
         output_dir:           Where to save bscan_*.npy and scan_meta.npy.
-        n_scans:              Number of rotation angles (evenly spaced over 180 deg).
+        n_scans:              Number of rotation angles evenly spaced over [0°, 180°) (endpoint excluded).
         num_elements:         Number of array elements.
         element_pitch:        Element spacing (m).
         frequency:            Centre frequency (Hz).
@@ -994,11 +1000,9 @@ def generate_synthetic_bscans(
               f"({timer.time() - t0:.1f}s)")
 
     # ---- Simulation config ----
-    scan_plan = ScanPlanConfig(
-        n_scans=n_scans,
-        theta_start=-np.pi / 2,
-        theta_end=np.pi / 2,
-    )
+    # Angles span [0, π) with endpoint excluded — paper convention, no
+    # duplicate projection between first and last frame.
+    scan_plan = ScanPlanConfig(n_scans=n_scans)
     cfg = SimulationConfig(
         specimen=SpecimenConfig(thickness=specimen.thickness, width=specimen.width),
         array=ArrayConfig(
@@ -1175,7 +1179,7 @@ if __name__ == '__main__':
     element_height= 5e-3
 
     # Scan parameters
-    n_scans = 32                 # Number of rotation angles over 180 deg
+    n_scans = 32                 # Rotation frames over [0°, 180°), endpoint excluded
 
     # TFM imaging parameters
     tfm_z_start = 10e-3          # Start depth (m)
@@ -1193,12 +1197,10 @@ if __name__ == '__main__':
             center_z=25e-3, center_x=5e-3, center_y=5e-3, radius=2e-3),
     ]
 
-    # Reconstruction config
+    # Reconstruction config — defaults match the paper (ramp |ω| filter,
+    # circle mask, DC subtraction). Override here if needed.
     config = ReconConfig(
-        filter_name='shepp-logan',
-        circle=True,
         taper_fraction=0.1,
-        subtract_angular_mean=False,
         rolloff_fraction=0.08,
     )
 

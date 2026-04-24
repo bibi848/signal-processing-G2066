@@ -994,10 +994,8 @@ def main():
         print(f"  Voxel volume shape: {voxel_volume.shape}")
 
     # ---- Simulation config ----
-    # Rotate 180° around the array centre (−90° to +90°)
-    scan_plan = ScanPlanConfig(n_scans=16,
-                               theta_start=-np.pi / 2,
-                               theta_end=np.pi / 2)
+    # Rotate over [0°, 180°) — paper convention, endpoint excluded.
+    scan_plan = ScanPlanConfig(n_scans=16)
     cfg = SimulationConfig(
         specimen=SpecimenConfig(thickness=specimen.thickness, width=specimen.width),
         array=ArrayConfig(num_elements=64, element_pitch=0.6e-3, frequency=frequency),
