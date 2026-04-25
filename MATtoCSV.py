@@ -1,4 +1,5 @@
 '''
+Author: OD
 This script converts the .mat files collected from using the ultrasonic scanning array to .csv files. 
 '''
 #%%
@@ -19,7 +20,6 @@ def remove_spikes(signal, threshold=500, verbose=False):
             if verbose:
                 print('Signal exceeds threshold')
     return signal
-
 
 # Point the script to the correct subfolder.
 raw_data_type       = '2D Raw Data'
@@ -129,8 +129,6 @@ for file in mat_files:
                                     threshold=500,
                                     verbose=True)
 
-    
-    # New Arrays
     # Time
     time_df = pd.DataFrame({
         "time_seconds": time

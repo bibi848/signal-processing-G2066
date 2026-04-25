@@ -1,3 +1,7 @@
+'''
+Author: OD
+'''
+
 #%%
 # Importing Functions and Defining Correct Path
 import matplotlib.pyplot as plt

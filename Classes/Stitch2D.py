@@ -1,3 +1,7 @@
+'''
+Author: OD
+'''
+
 import numpy as np
 
 def normalised_correlation_2D(img1, img2):

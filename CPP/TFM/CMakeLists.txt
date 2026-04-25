@@ -1,3 +1,5 @@
+# Author: OD
+
 pybind11_add_module(tfm_cpp
     tfm.cpp
     bindings.cpp
@@ -24,7 +26,7 @@ else()
             target_link_libraries(tfm_cpp PRIVATE ${OMP_LIBRARY})
             target_compile_options(tfm_cpp PRIVATE -Xpreprocessor -fopenmp)
         else()
-            message(WARNING "OpenMP not found. Please install.")
+            message(WARNING "OpenMP not found.")
         endif()
     else()
         message(WARNING "OpenMP not found, building single-threaded.")
@@ -36,4 +38,4 @@ target_include_directories(tfm_cpp
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-message(STATUS "Building TFM CPU version (Windows/Linux OpenMP)")
+message(STATUS "Building TFM CPU version")

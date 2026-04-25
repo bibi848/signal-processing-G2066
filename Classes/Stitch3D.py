@@ -1,20 +1,11 @@
+'''
+Author: OD
+'''
+
 import numpy as np
 
 def normalised_correlation_3D(vol1, vol2, axis='x', max_shift=100):
-    '''
-    Compute normalized cross-correlation between two volumes
-
-    Parameters
-    vol1, vol2: Volumes with shape (z, x, y)
-    axis:       Axis to shift along: 'x' or 'y'
-    max_shift:  Maximum shift to test in both directions
-
-    Returns
-    best_shift:   Shift that gives maximum correlation
-    shifts:       All tested shifts
-    corr_values:  Correlation values for each shift
-    '''
-
+    
     z1, x1, y1 = vol1.shape
     z2, x2, y2 = vol2.shape
 

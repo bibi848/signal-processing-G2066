@@ -1,4 +1,5 @@
 '''
+Author: OD
 This script goes through the process of measuring, collecting and stitching 
 the backscattering diffraction data from a measured copper sample. 
 Firstly, 5MHz pulses are used on the sample to measure the speed of sound in the 
