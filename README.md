@@ -4,146 +4,25 @@ Welcome to the 2026 Group Industrial Project GitHub repository for Sensing, Imag
 
 ## Repository Summary
 Folders:
+* **3D RECONSTRUCTION**: Contains the frameworks for combining 2D TFM slices into full 3D volumes. 
 * **CPP**: Contains the frameworks for accelerated TFM calculations, using both OpenMP for CPU multi-threading and HIP/ROCm for GPU leveraged computing based on a C++ architecture. A full explanation is included in the folder itself. 
-* **Classes**: Contains TFM implementations in Python.
+* **Classes**: Contains functions for calculating the speed of sound, filtering, stitching in 2D or 3D and a python TFM implementation.
 * **DATA**: Contains raw and processed data, as well as finalised TFM images used in stitching operations.
-* **STITCHING**: Contains notebooks exploring different stitching algorithms applied to the TFM images. 
+* **PROCESSING**: Contains experimental procedures as part of the project, function demos (filtering, speed of sound calculations...etc) and a batch GPU TFM implementation. More information is included in the folder. 
+* **STITCHING**: Contains programs exploring different stitching algorithms applied to the TFM images.
+* **SYNTHETIC DATA**: Contains programs exploring the synthetic data generation pipeline. 
 
 Files:
-* `.gitignore`: Used to ignore files or folders from commits, such as propriatary datasets. 
-* `.python-version`: Used to define the Python version of the project. The project uses Python 3.13.7
-* `CMakeLists.txt`: Detects whether the user is using Windows or Linux, to set up the OpenMP and HIP/ROCm environments. More details below.
+* `.gitignore`: Used to ignore files or folders from commits, such as propriatary datasets.
+* `CMakeLists.txt`: Detects whether the user is using Windows, Linux or Mac, to set up the OpenMP and HIP/ROCm environments. More details in the CPP folder. 
 * `Display3DData.py`: Uses the napari library to view the 3D TFM data.
 * `Imaging.py`: Connects the processed data to the appropriate TFM calculation, which can include a Python-based calculation held in the folder **Classes**, an OpenMP accelerated C++ function contained in the **CPP** folder, or a GPU leveraged computation held in the **CPP** folder. This is for producing 2D TFM images.
 * `Imaging3D.py`: Connects the processed data to the appropriate TFM calculation, which includes an OpenMP accelerated C++ function in the **CPP** folder, or a GPU leveraged computation held in the **CPP** folder. This is for producing 3D TFM images.
 * `MATtoCSV.py`: Converts the raw data collected in the UNDT lab (.mat files) to processed and readable data (.xlsx files) to then be imaged by `Imaging.py` or `Imaging3D.py`. 
 * `README.md`: The file you are reading right now!
-* `requirements.txt`: Contains all libraries used in the project. More information on how to use it below. 
+* `requirements.txt`: Contains all libraries used in the project.
 
 Folders that contain a lot of information will themselves have a `README.md` file available. 
-
-## Using the Repository
-
-This repository is set up so that each collaborator works on their own branch, rather than directly on the `main` branch. This helps prevent conflicts and keeps the project organised.
-
-### 1. Cloning the repository
-
-Clone repository through VSCode. 
-
----
-
-### 2. Viewing all available branches
-
-Each collaborator has their own branch named in the format:
-
-    feature-<name>
-
-For example:
-
-    feature-oscar
-
-To see all branches in the repository, run:
-
-    git branch -a
-
-This will list both local and remote branches.
-
----
-
-### 3. Switching to your own branch
-
-Once you know the name of your branch, switch to it using:
-
-    git switch feature-<your-name>
-
-Example:
-
-    git switch feature-oscar
-
-After switching, all changes you make will be saved to your own branch, not `main`.
-
----
-
-### 4. Making and saving changes
-
-You can now edit files, run code, and add new content.
-
----
-
-### 5. Merging your work into `main`
-
-Do not push directly to the `main` branch.
-
-When your work is ready:
-1. Push your branch to GitHub
-2. Open a Pull Request from your `feature-<name>` branch into `main`
-3. Another group member will review and merge your changes
-
----
-
-### 6. Using the virtual environment
-
-**Quick Start:**
-
-The virtual environment (.venv) is already set up with all dependencies installed. To use it:
-
-**Option 1: Using the activation script (Recommended for macOS):**
-
-    source activate.sh
-
-This activates the virtual environment and configures Qt for napari on macOS.
-
-**Option 2: Direct activation:**
-
-    source .venv/bin/activate  # macOS/Linux
-    .venv\Scripts\activate     # Windows
-
-**Option 3: Run scripts directly (no activation needed):**
-
-    .venv/bin/python "SYNTHETIC DATA/3d synthetic data v2.py"
-
----
-
-**Setting up from scratch (if .venv doesn't exist):**
-
-If you need to recreate the virtual environment:
-
-1. Create the virtual environment:
-   ```bash
-   python3 -m venv .venv
-   ```
-
-2. Activate it:
-   ```bash
-   source .venv/bin/activate  # macOS/Linux
-   .venv\Scripts\activate     # Windows
-   ```
-
-3. Upgrade pip:
-   ```bash
-   pip install --upgrade pip
-   ```
-
-4. Install all dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-**Important for macOS users using napari:**
-
-The project's Python scripts automatically configure Qt for macOS, so napari will work correctly when you run them directly. The `activate.sh` script provides the cleanest environment setup.
-
-**Note:** PyQt5 is required for napari and is included in `requirements.txt`.
-
---- 
-
-### 7. Merging from and to main
-
-When working on this repository, please work in your dedicated branch. You can get the most up-to-date main branch by running:
-
-    git merge main
-
-in your branch. When you would like to upload your work to the main branch, commit and push your staged changes as you would normally. The changes will appear on the web version of GitHub where we can evaluate the pull request. This ensures that there are no large clashes when uploading lots of work. 
 
 ---
 
