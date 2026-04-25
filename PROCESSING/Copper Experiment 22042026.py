@@ -1,10 +1,11 @@
 '''
+Author: OD
 This script goes through the process of analysing the backscattering
 diffraction data from the copper sample scanned on 22/04/2026.
 The data consists of two scan groups with no array rotation:
 
-Group 1 (r1x) uses mostly x-axis shifts with one y-axis shift.
-Group 2 (r2x) uses mostly y-axis shifts with one x-axis shift.
+Group 1 (r1x) uses x-axis shifts with one y-axis shift.
+Group 2 (r2x) uses y-axis shifts with one x-axis shift.
 
 The scan order and imaging parameters are taken directly from the
 Parameters.txt file stored alongside the imaged data.
@@ -47,9 +48,6 @@ def normalise_volume(vol):
 
 def analyse_pair(scan_a, scan_b, stitch_axis='x', max_shift=100, crop_pixels=40):
 
-    if stitch_axis not in ['x', 'y']:
-        raise ValueError("stitch_axis must be 'x' or 'y'")
-
     vol_a = crop_volume(read_npy(scan_a).astype(np.float32), crop_pixels=crop_pixels)
     vol_b = crop_volume(read_npy(scan_b).astype(np.float32), crop_pixels=crop_pixels)
 
@@ -65,7 +63,6 @@ def analyse_pair(scan_a, scan_b, stitch_axis='x', max_shift=100, crop_pixels=40)
     canvas_a, canvas_b = stitch_volumes(vol_a, vol_b, shift, axis=stitch_axis)
 
     print(f'{scan_a} to {scan_b}')
-    print(f'Stitch Axis: {stitch_axis}')
     print(f'Pixel Shift: {shift} pixels')
     print(f'Distance Calculated: {shift * pixel_size * 1000:.3f} mm')
     print(f'Absolute Distance: {abs(shift * pixel_size * 1000):.3f} mm')
@@ -87,35 +84,6 @@ def analyse_pair(scan_a, scan_b, stitch_axis='x', max_shift=100, crop_pixels=40)
         'shifts': shifts,
         'corr_values': corr_values,
     }
-
-def build_group_position_table(group_name, pair_results):
-
-    scan_labels = SCAN_GROUPS[group_name]['scan_labels']
-    x_positions_pixels = [0]
-    y_positions_pixels = [0]
-
-    x_current = 0
-    y_current = 0
-
-    for result in pair_results:
-
-        if result['axis'] == 'x':
-            x_current += result['shift_pixels']
-        elif result['axis'] == 'y':
-            y_current += result['shift_pixels']
-
-        x_positions_pixels.append(x_current)
-        y_positions_pixels.append(y_current)
-
-    position_df = pd.DataFrame({
-        'scan_label': scan_labels,
-        'x_shift_pixels': x_positions_pixels,
-        'y_shift_pixels': y_positions_pixels,
-        'x_shift_mm': np.array(x_positions_pixels) * x_pixel_size * 1000,
-        'y_shift_mm': np.array(y_positions_pixels) * y_pixel_size * 1000,
-    })
-
-    return position_df
 
 def build_group_composite(scan_labels, position_df, crop_pixels=40):
 
@@ -155,44 +123,6 @@ def build_group_composite(scan_labels, position_df, crop_pixels=40):
     composite[~np.isfinite(composite)] = np.min(finite_values)
 
     return composite
-
-def plot_scan_layouts():
-
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-
-    for ax, (group_name, group_data) in zip(axes, SCAN_GROUPS.items()):
-        layout = np.array(group_data['layout'])
-        ax.imshow(np.zeros(layout.shape), cmap='gray', vmin=0, vmax=1)
-
-        for row in range(layout.shape[0]):
-            for col in range(layout.shape[1]):
-                ax.text(col, row, str(layout[row, col]),
-                        ha='center', va='center', fontsize=14, color='white')
-
-        ax.set_title(f"{group_name}: {group_data['title']}")
-        ax.set_xticks(range(layout.shape[1]))
-        ax.set_yticks(range(layout.shape[0]))
-        ax.set_xticklabels([])
-        ax.set_yticklabels([])
-        ax.grid(color='white', linewidth=1)
-
-    plt.tight_layout()
-    plt.show()
-
-def plot_group_positions(group_name, position_df):
-
-    plt.figure(figsize=(6, 5))
-    plt.plot(position_df['x_shift_mm'], position_df['y_shift_mm'], '-o')
-
-    for _, row in position_df.iterrows():
-        plt.text(row['x_shift_mm'], row['y_shift_mm'], row['scan_label'])
-
-    plt.xlabel('x shift [mm]')
-    plt.ylabel('y shift [mm]')
-    plt.title(f'Cumulative Scan Positions: {group_name}')
-    plt.grid(True)
-    plt.axis('equal')
-    plt.show()
 
 #%%
 # Extracting Data
@@ -296,11 +226,29 @@ SCAN_GROUPS = {
 
 #%%
 # Scan Layouts from Parameters.txt
-plot_scan_layouts()
+fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+
+for ax, (group_name, group_data) in zip(axes, SCAN_GROUPS.items()):
+    layout = np.array(group_data['layout'])
+    ax.imshow(np.zeros(layout.shape), cmap='gray', vmin=0, vmax=1)
+
+    for row in range(layout.shape[0]):
+        for col in range(layout.shape[1]):
+            ax.text(col, row, str(layout[row, col]),
+                    ha='center', va='center', fontsize=14, color='white')
+            
+    ax.set_title(f"{group_name}: {group_data['title']}")
+    ax.set_xticks(range(layout.shape[1]))
+    ax.set_yticks(range(layout.shape[0]))
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    ax.grid(color='white', linewidth=1)
+
+plt.tight_layout()
+plt.show()
 
 #%%
 # Stitch Test
-
 group_name = 'r1'
 pair_number = 3
 max_shift = 100
@@ -369,7 +317,31 @@ for group_name, group_data in SCAN_GROUPS.items():
 
     group_results[group_name] = pair_results
 
-    position_df = build_group_position_table(group_name, pair_results)
+    scan_labels = SCAN_GROUPS[group_name]['scan_labels']
+    x_positions_pixels = [0]
+    y_positions_pixels = [0]
+
+    x_current = 0
+    y_current = 0
+
+    for result in pair_results:
+
+        if result['axis'] == 'x':
+            x_current += result['shift_pixels']
+        elif result['axis'] == 'y':
+            y_current += result['shift_pixels']
+
+        x_positions_pixels.append(x_current)
+        y_positions_pixels.append(y_current)
+
+    position_df = pd.DataFrame({
+        'scan_label': scan_labels,
+        'x_shift_pixels': x_positions_pixels,
+        'y_shift_pixels': y_positions_pixels,
+        'x_shift_mm': np.array(x_positions_pixels) * x_pixel_size * 1000,
+        'y_shift_mm': np.array(y_positions_pixels) * y_pixel_size * 1000,
+    })
+
     group_position_tables[group_name] = position_df
 
     print('Cumulative Positions:')
@@ -378,13 +350,22 @@ for group_name, group_data in SCAN_GROUPS.items():
 
 #%%
 # Plot cumulative x/y positions for each scan group
-
 for group_name, position_df in group_position_tables.items():
-    plot_group_positions(group_name, position_df)
+    plt.figure(figsize=(6, 5))
+    plt.plot(position_df['x_shift_mm'], position_df['y_shift_mm'], '-o')
+
+    for _, row in position_df.iterrows():
+        plt.text(row['x_shift_mm'], row['y_shift_mm'], row['scan_label'])
+
+    plt.xlabel('x shift [mm]')
+    plt.ylabel('y shift [mm]')
+    plt.title(f'Cumulative Scan Positions: {group_name}')
+    plt.grid(True)
+    plt.axis('equal')
+    plt.show()
 
 #%%
 # Build composite overlays for each group
-
 group_name = 'r2'
 crop_pixels = 40
 
@@ -400,8 +381,7 @@ viewer.add_image(
 napari.run()
 
 #%%
-# Save a horizontal slice from the composite volume as a .png
-
+# Save a horizontal slice
 group_name = 'r2'
 z_depth_mm = 8.0
 save_name = f'{group_name}_horizontal_slice_8p0mm.png'

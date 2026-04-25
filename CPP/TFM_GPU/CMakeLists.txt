@@ -1,3 +1,5 @@
+# Author: OD
+
 if(DEFINED ENV{ROCM_PATH})
     set(ROCM_PATH $ENV{ROCM_PATH})
 elseif(CMAKE_PREFIX_PATH)

@@ -1,3 +1,5 @@
+// Author: OD
+
 #include "tfm_ultra.h"
 #include <hip/hip_runtime.h>
 #include <algorithm>
@@ -7,20 +9,19 @@
 #include <cstring>
 #include <vector>
 
-#define HIP_CHECK(cmd)                                                      \
-    do {                                                                    \
-        hipError_t e = (cmd);                                               \
-        if (e != hipSuccess) {                                              \
-            fprintf(stderr, "HIP error %s:%d '%s'\n",                     \
-                    __FILE__, __LINE__, hipGetErrorString(e));              \
-            std::exit(EXIT_FAILURE);                                        \
-        }                                                                   \
+#define HIP_CHECK(cmd)                                                      
+    do {                                                      
+        hipError_t e = (cmd);                                 
+        if (e != hipSuccess) {                                
+            fprintf(stderr, "HIP error %s:%d '%s'\n",         
+                    __FILE__, __LINE__, hipGetErrorString(e));
+            std::exit(EXIT_FAILURE);                          
+        }                                                     
     } while (0)
 
 namespace {
 
 struct TFMUltraContext {
-    // geometry/config
     int Nf = 0;
     int Nt = 0;
     int Nx = 0;
@@ -34,11 +35,9 @@ struct TFMUltraContext {
     double dt = 0.0;
     double t0 = 0.0;
 
-    // device geometry buffers
     double *d_time = nullptr, *d_xc = nullptr, *d_zc = nullptr, *d_X = nullptr, *d_Z = nullptr;
     int *d_tx = nullptr, *d_rx = nullptr;
 
-    // double-buffered per-batch buffers
     double *d_td_flat[2]  = {nullptr, nullptr};
     double *d_img_flat[2] = {nullptr, nullptr};
     double *h_td_flat[2]  = {nullptr, nullptr};
@@ -152,7 +151,7 @@ void tfm1D_ultra_kernel(
     double inv_c,
     double dt,
     double t0,
-    double* __restrict__ img_flat              // [N_images, Np]
+    double* __restrict__ img_flat
 ) {
     const int p       = blockIdx.x * blockDim.x + threadIdx.x;
     const int img_idx = blockIdx.y;
@@ -251,7 +250,7 @@ void collect_one_chunk(double* img_stacked, int batch_offset, int n_chunk, int s
     );
 }
 
-} // namespace
+}
 
 void tfm1D_init_geometry_GPU(
     const double* time,
@@ -270,11 +269,6 @@ void tfm1D_init_geometry_GPU(
     int           threads,
     double        c
 ) {
-    if (Nt < 2 || Nf <= 0 || Nx <= 0 || Nz <= 0 || Nelem <= 0 || max_batch <= 0) {
-        std::fprintf(stderr, "Invalid geometry or batch dimensions passed to tfm1D_init_geometry_GPU\n");
-        std::exit(EXIT_FAILURE);
-    }
-
     ensure_context_matches(Nf, Nt, Nx, Nz, Nelem, max_batch, threads, c);
 
     g_ctx.dt = time[1] - time[0];
@@ -294,10 +288,6 @@ void tfm1D_batch_GPU_stacked(
     int           N_images,
     double*       img_stacked
 ) {
-    if (!g_ctx.initialised) {
-        std::fprintf(stderr, "tfm1D_batch_GPU_stacked called before tfm1D_init_geometry_GPU\n");
-        std::exit(EXIT_FAILURE);
-    }
     if (N_images <= 0) return;
 
     int previous_slot = -1;
@@ -332,7 +322,6 @@ void tfm1D_batch_GPU_stacked(
 void clear_tfm1D_GPU_cache() {
     free_all_context();
 }
-
 
 int tfm1D_current_Nx() { return g_ctx.Nx; }
 int tfm1D_current_Nz() { return g_ctx.Nz; }

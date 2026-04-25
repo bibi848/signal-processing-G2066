@@ -1,3 +1,6 @@
+'''
+Author: OD
+'''
 #%%
 # Imports
 import numpy as np

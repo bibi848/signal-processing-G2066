@@ -1,4 +1,5 @@
 """
+Author: OD
 Batch GPU TFM imaging using the TFM_U pipeline (tfm_ultra module).
 """
 # %%
@@ -85,68 +86,60 @@ if '2D' in input_data_folder:
 print(f'Found {len(image_folders)} image folders')
 
 
-def postprocess(raw, mode):
-    if mode == 'real':
-        return raw
-    analytic = hilbert(raw, axis=0)
-    if mode == 'complex':
-        return analytic
-    envelope = np.abs(analytic)
-    if mode == 'envelope':
-        return envelope
-    if mode == 'db':
-        return 20.0 * np.log10(envelope / (envelope.max() + 1e-10) + 1e-10)
-    return raw
+def load_batch_into_buffer(buffer, folders, ref):
+    io_start = time.perf_counter()
+    batch_meta: list[dict] = []
 
-def display_image(img, x_img, z_img, title, xa, za):
-    img_disp = np.abs(img) if np.iscomplexobj(img) else img
-    plt.figure(figsize=(xa, za))
-    kwargs = dict(
-        extent=[x_img[0] * 1e3, x_img[-1] * 1e3, z_img[-1] * 1e3, z_img[0] * 1e3],
-        aspect='auto',
-        cmap=cmap,
-    )
-    if img_output == 'db':
-        kwargs.update(vmin=vmin, vmax=vmax)
-    plt.imshow(img_disp, **kwargs)
-    plt.xlabel('x [mm]')
-    plt.ylabel('z [mm]')
-    plt.colorbar(label='Amplitude')
-    plt.title(title)
-    plt.tight_layout()
-    plt.show()
+    for i, fol in enumerate(folders):
+        file_path = os.path.join(IN_DIR, fol)
 
-def load_reference_geometry(ref_folder):
-    file_path = os.path.join(IN_DIR, ref_folder)
+        with h5py.File(os.path.join(file_path, 'time_data.h5'), 'r') as h5f:
+            dset = h5f['time_data']
+            dset.read_direct(buffer[i])
 
-    metadata = pd.read_csv(os.path.join(file_path, 'metadata.csv'))
-    time_sec = pd.read_csv(os.path.join(file_path, 'time.csv'))['time_seconds'].values.astype(np.float64)
-    tx_rx = pd.read_csv(os.path.join(file_path, 'tx_rx.csv'))
-    geometry = pd.read_csv(os.path.join(file_path, 'array_geometry.csv'))
+        batch_meta.append({
+            'fol': fol,
+            'x_img': ref['x_img'],
+            'z_img': ref['z_img'],
+            'x_aspect': ref['x_aspect'],
+        })
 
-    tx_vals = tx_rx['tx'].values.astype(np.int32) - 1
-    rx_vals = tx_rx['rx'].values.astype(np.int32) - 1
-    xc_vals = geometry['el_xc'].values.astype(np.float64)
-    zc_vals = geometry['el_zc'].values.astype(np.float64)
+    io_end = time.perf_counter()
+    return batch_meta, (io_end - io_start)
 
-    with h5py.File(os.path.join(file_path, 'time_data.h5'), 'r') as h5f:
-        dset = h5f['time_data']
-        if dset.ndim != 2:
-            raise ValueError(f'{ref_folder}: expected 2D time_data, got shape {dset.shape}')
-        Nf, Nt = map(int, dset.shape)
 
-    x_lo = xc_vals.min() if x_min == 'xc_min' else x_min
-    x_hi = xc_vals.max() if x_max == 'xc_max' else x_max
+# %%
+# Main loop
+full_start = time.perf_counter()
 
-    x_img = np.linspace(x_lo, x_hi, x_pixels, dtype=np.float64)
-    z_img = np.linspace(z_max, z_min, z_pixels, dtype=np.float64)
-    X, Z = np.meshgrid(x_img, z_img)
+file_path = os.path.join(IN_DIR, image_folders[0])
 
-    local_x_aspect = x_aspect
-    if real_aspect_ratio:
-        local_x_aspect = int(np.ceil(((x_hi - x_lo) / (z_min - z_max)) * z_aspect))
+metadata = pd.read_csv(os.path.join(file_path, 'metadata.csv'))
+time_sec = pd.read_csv(os.path.join(file_path, 'time.csv'))['time_seconds'].values.astype(np.float64)
+tx_rx = pd.read_csv(os.path.join(file_path, 'tx_rx.csv'))
+geometry = pd.read_csv(os.path.join(file_path, 'array_geometry.csv'))
 
-    return {
+tx_vals = tx_rx['tx'].values.astype(np.int32) - 1
+rx_vals = tx_rx['rx'].values.astype(np.int32) - 1
+xc_vals = geometry['el_xc'].values.astype(np.float64)
+zc_vals = geometry['el_zc'].values.astype(np.float64)
+
+with h5py.File(os.path.join(file_path, 'time_data.h5'), 'r') as h5f:
+    dset = h5f['time_data']
+    Nf, Nt = map(int, dset.shape)
+
+x_lo = xc_vals.min() if x_min == 'xc_min' else x_min
+x_hi = xc_vals.max() if x_max == 'xc_max' else x_max
+
+x_img = np.linspace(x_lo, x_hi, x_pixels, dtype=np.float64)
+z_img = np.linspace(z_max, z_min, z_pixels, dtype=np.float64)
+X, Z = np.meshgrid(x_img, z_img)
+
+local_x_aspect = x_aspect
+if real_aspect_ratio:
+    local_x_aspect = int(np.ceil(((x_hi - x_lo) / (z_min - z_max)) * z_aspect))
+
+shared_geom = {
         'metadata': metadata,
         'time': np.ascontiguousarray(time_sec),
         'tx': np.ascontiguousarray(tx_vals),
@@ -168,77 +161,6 @@ def load_reference_geometry(ref_folder):
         'zc_shape': zc_vals.shape,
     }
 
-def validate_folder_against_reference(folder, ref):
-    file_path = os.path.join(IN_DIR, folder)
-
-    tx_rx = pd.read_csv(os.path.join(file_path, 'tx_rx.csv'))
-    geometry = pd.read_csv(os.path.join(file_path, 'array_geometry.csv'))
-    time_sec = pd.read_csv(os.path.join(file_path, 'time.csv'))['time_seconds'].values
-
-    tx_vals = tx_rx['tx'].values.astype(np.int32) - 1
-    rx_vals = tx_rx['rx'].values.astype(np.int32) - 1
-    xc_vals = geometry['el_xc'].values.astype(np.float64)
-    zc_vals = geometry['el_zc'].values.astype(np.float64)
-
-    if time_sec.shape != ref['time_shape']:
-        raise ValueError(f'{folder}: time axis shape mismatch {time_sec.shape} != {ref["time_shape"]}')
-    if tx_vals.shape != ref['tx_shape']:
-        raise ValueError(f'{folder}: tx shape mismatch {tx_vals.shape} != {ref["tx_shape"]}')
-    if rx_vals.shape != ref['rx_shape']:
-        raise ValueError(f'{folder}: rx shape mismatch {rx_vals.shape} != {ref["rx_shape"]}')
-    if xc_vals.shape != ref['xc_shape'] or zc_vals.shape != ref['zc_shape']:
-        raise ValueError(f'{folder}: geometry size mismatch with reference folder')
-
-    if not np.array_equal(tx_vals, ref['tx']):
-        raise ValueError(f'{folder}: tx values differ from reference; cannot reuse prepared GPU geometry')
-    if not np.array_equal(rx_vals, ref['rx']):
-        raise ValueError(f'{folder}: rx values differ from reference; cannot reuse prepared GPU geometry')
-    if not np.allclose(time_sec, ref['time']):
-        raise ValueError(f'{folder}: time axis differs from reference; cannot reuse prepared GPU geometry')
-    if not np.allclose(xc_vals, ref['xc']) or not np.allclose(zc_vals, ref['zc']):
-        raise ValueError(f'{folder}: element geometry differs from reference; cannot reuse prepared GPU geometry')
-
-    with h5py.File(os.path.join(file_path, 'time_data.h5'), 'r') as h5f:
-        dset = h5f['time_data']
-        if tuple(dset.shape) != (ref['Nf'], ref['Nt']):
-            raise ValueError(
-                f'{folder}: time_data shape mismatch {tuple(dset.shape)} != {(ref["Nf"], ref["Nt"])}'
-            )
-
-def load_batch_into_buffer(buffer, folders, ref, validate_geometry = False):
-    io_start = time.perf_counter()
-    batch_meta: list[dict] = []
-
-    for i, fol in enumerate(folders):
-        file_path = os.path.join(IN_DIR, fol)
-
-        if validate_geometry:
-            validate_folder_against_reference(fol, ref)
-
-        with h5py.File(os.path.join(file_path, 'time_data.h5'), 'r') as h5f:
-            dset = h5f['time_data']
-            if tuple(dset.shape) != (ref['Nf'], ref['Nt']):
-                raise ValueError(
-                    f'{fol}: time_data shape mismatch {tuple(dset.shape)} != {(ref["Nf"], ref["Nt"])}'
-                )
-            dset.read_direct(buffer[i])
-
-        batch_meta.append({
-            'fol': fol,
-            'x_img': ref['x_img'],
-            'z_img': ref['z_img'],
-            'x_aspect': ref['x_aspect'],
-        })
-
-    io_end = time.perf_counter()
-    return batch_meta, (io_end - io_start)
-
-
-# %%
-# Main loop
-full_start = time.perf_counter()
-
-shared_geom = load_reference_geometry(image_folders[0])
 Np = shared_geom['X'].size
 print(f"Reference dataset: Nf={shared_geom['Nf']}, Nt={shared_geom['Nt']}, Np={Np}")
 
@@ -274,7 +196,6 @@ try:
             host_batch_a,
             all_batches[0],
             shared_geom,
-            False,
         )
 
         for batch_idx, batch_folders in enumerate(all_batches):
@@ -295,9 +216,7 @@ try:
                     next_buffer,
                     all_batches[batch_idx + 1],
                     shared_geom,
-                    validate_next_batch,
                 )
-                validate_next_batch = False
 
             gpu_start = time.perf_counter()
             raw_imgs = tfm_ultra.tfm1D_batch_GPU(current_buffer[:n])
@@ -306,10 +225,38 @@ try:
 
             post_start = time.perf_counter()
             for raw, meta in zip(raw_imgs, batch_meta):
-                img = postprocess(raw, img_output)
+                if img_output == 'real':
+                    img = raw
+                if img_output == 'complex':
+                    analytic = hilbert(raw, axis=0)
+                    img =  analytic
+                if img_output == 'envelope':
+                    analytic = hilbert(raw, axis=0)
+                    envelope = np.abs(analytic)
+                    img = envelope
+                if img_output == 'db':
+                    analytic = hilbert(raw, axis=0)
+                    envelope = np.abs(analytic)
+                    img =  20.0 * np.log10(envelope / (envelope.max() + 1e-10) + 1e-10)
 
                 if display_picture:
-                    display_image(img, meta['x_img'], meta['z_img'], meta['fol'], meta['x_aspect'], z_aspect)
+
+                    img_disp = np.abs(img) if np.iscomplexobj(img) else img
+                    plt.figure(figsize=(meta['x_aspect'], z_aspect))
+                    kwargs = dict(
+                        extent=[meta['x_img'][0] * 1e3, meta['x_img'][-1] * 1e3, 
+                                meta['z_img'][-1] * 1e3, meta['z_img'][0] * 1e3],
+                        aspect='auto',
+                        cmap=cmap,
+                    )
+                    if img_output == 'db': kwargs.update(vmin=vmin, vmax=vmax)
+                    plt.imshow(img_disp, **kwargs)
+                    plt.xlabel('x [mm]')
+                    plt.ylabel('z [mm]')
+                    plt.colorbar(label='Amplitude')
+                    plt.title(meta['fol'])
+                    plt.tight_layout()
+                    plt.show()
 
                 if save_picture:
                     if img_output == 'complex':

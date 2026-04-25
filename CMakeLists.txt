@@ -1,3 +1,4 @@
+# Author: OD
 cmake_minimum_required(VERSION 3.22)
 
 project(signal_processing_cpp LANGUAGES CXX)

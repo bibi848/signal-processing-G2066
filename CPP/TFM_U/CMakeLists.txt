@@ -1,3 +1,5 @@
+# Author: OD
+
 if(DEFINED ENV{ROCM_PATH})
     set(ROCM_PATH $ENV{ROCM_PATH})
 elseif(CMAKE_PREFIX_PATH)
@@ -6,7 +8,6 @@ else()
     set(ROCM_PATH "/opt/rocm")
 endif()
 
-message(STATUS "[TFM_U] Using ROCm path: ${ROCM_PATH}")
 set(HIPCC ${ROCM_PATH}/bin/hipcc)
 
 # Compile the HIP kernel

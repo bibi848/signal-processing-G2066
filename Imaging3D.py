@@ -1,4 +1,5 @@
 '''
+Author: OD
 This script converts the 2D array files processed previously into 3D TFM images. 
 '''
 
