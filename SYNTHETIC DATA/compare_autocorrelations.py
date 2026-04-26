@@ -90,7 +90,8 @@ def print_table(groups: list[dict]) -> None:
 
 
 def plot_comparison(groups: list[dict]) -> None:
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.2), sharey=True)
+    AX, TICK, TITLE, LEG = 18, 16, 19, 15
+    fig, axes = plt.subplots(1, 3, figsize=(16.5, 4.5), sharey=True)
     for ax, axis_label in zip(axes, ('z', 'y', 'x')):
         for g in groups:
             common = g['common_lag_mm']
@@ -100,16 +101,28 @@ def plot_comparison(groups: list[dict]) -> None:
             line, = ax.plot(common, mean, lw=1.8, label=g['label'])
             ax.fill_between(common, mean - std, mean + std,
                             alpha=0.18, color=line.get_color(), linewidth=0)
-        ax.axhline(THRESHOLD, color='k', ls='--', lw=0.6, label=f'1/e = {THRESHOLD:.3f}'
-                   if axis_label == 'z' else None)
+        ax.axhline(THRESHOLD, color='k', ls='--', lw=0.6,
+                   label=f'1/e = {THRESHOLD:.3f}' if axis_label == 'z' else None)
         ax.axvline(0, color='k', lw=0.4)
-        ax.set_title(f'{axis_label}-axis mean ACF  (±1σ band)')
-        ax.set_xlabel('lag [mm]')
+        ax.set_title(f'{axis_label}-axis mean ACF  (±1σ band)', fontsize=TITLE)
+        ax.set_xlabel('Lag [mm]', fontsize=AX)
+        ax.tick_params(labelsize=TICK)
         ax.grid(alpha=0.3)
         if axis_label == 'z':
-            ax.set_ylabel('autocorrelation')
-            ax.legend(fontsize=8, loc='upper right')
+            ax.set_ylabel('autocorrelation', fontsize=AX)
+
     plt.tight_layout()
+    handles, labels = axes[0].get_legend_handles_labels()
+    leg = axes[-1].legend(handles, labels, fontsize=LEG,
+                          loc='center left',
+                          bbox_to_anchor=(1.02, 0.5),
+                          borderaxespad=0.0,
+                          frameon=True)
+    out_path = HERE / 'output' / 'plots' / 'autocorrelation_comparison.png'
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_path, dpi=180, bbox_inches='tight',
+                bbox_extra_artists=(leg,))
+    print(f"Saved → {out_path}")
     plt.show()
 
 

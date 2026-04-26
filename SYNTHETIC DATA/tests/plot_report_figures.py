@@ -107,96 +107,258 @@ def mip_triptych(volume, N, z_mm, xy_mm, half_mm, out_path):
     plt.close(fig)
 
 
-def radon_pipeline_figure(out_path, z0_target_mm=20.0):
-    """Pedagogical 3-panel figure showing the Radon re-indexing:
-         (a) stack of 2D TFM slices indexed by angle,
-         (b) sinogram at one depth z0 (re-indexed rows),
-         (c) inverse-Radon reconstruction at z0.
-    Reads the cached complex B-scans written by test_radon_validation.py."""
+def _draw_geometry_schematic(ax):
+    """3D schematic for panel (a): linear array on top of specimen, rotation
+    about the vertical z axis, and the three SCATTERERS drawn inside."""
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+    L, D = 18.0, 35.0  # mm half-width and depth of specimen
+
+    pts = np.array([
+        [-L, -L, 0], [+L, -L, 0], [+L, +L, 0], [-L, +L, 0],
+        [-L, -L, D], [+L, -L, D], [+L, +L, D], [-L, +L, D],
+    ])
+    edges = [(0, 1), (1, 2), (2, 3), (3, 0),
+             (4, 5), (5, 6), (6, 7), (7, 4),
+             (0, 4), (1, 5), (2, 6), (3, 7)]
+    for a, b in edges:
+        xs, ys, zs = zip(pts[a], pts[b])
+        ax.plot(xs, ys, zs, color='gray', lw=0.6, alpha=0.6)
+    ax.add_collection3d(Poly3DCollection(
+        [[pts[0], pts[1], pts[2], pts[3]]],
+        facecolor='lightblue', alpha=0.12, edgecolor='gray', lw=0.5))
+
+    array_len, array_w, z_arr = 28.0, 2.5, -0.4
+
+    def array_quad(theta):
+        ct, st = np.cos(theta), np.sin(theta)
+        local = np.array([[-array_len / 2, -array_w / 2],
+                          [+array_len / 2, -array_w / 2],
+                          [+array_len / 2, +array_w / 2],
+                          [-array_len / 2, +array_w / 2]])
+        rot = local @ np.array([[ct, -st], [st, ct]]).T
+        return [(rot[i, 0], rot[i, 1], z_arr) for i in range(4)]
+
+    ax.add_collection3d(Poly3DCollection(
+        [array_quad(0.0)], facecolor='crimson',
+        alpha=0.95, edgecolor='darkred', lw=1.5))
+    ax.add_collection3d(Poly3DCollection(
+        [array_quad(np.radians(60))], facecolor='crimson',
+        alpha=0.30, edgecolor='darkred', lw=1.0))
+
+    arc_r = 11.0
+    arc_t = np.linspace(np.radians(8), np.radians(65), 30)
+    arc_x = arc_r * np.cos(arc_t)
+    arc_y = arc_r * np.sin(arc_t)
+    arc_z = np.full_like(arc_t, -3.0)
+    ax.plot(arc_x, arc_y, arc_z, color='black', lw=2.0)
+    ax.quiver(arc_x[-2], arc_y[-2], arc_z[-2],
+              arc_x[-1] - arc_x[-2], arc_y[-1] - arc_y[-2], 0.0,
+              color='black', length=2.5, arrow_length_ratio=0.8, normalize=True)
+    ax.text(arc_r * np.cos(np.radians(36)) + 1.5,
+            arc_r * np.sin(np.radians(36)) + 0.5,
+            -3.0, r'$\theta$', fontsize=24, fontweight='bold')
+
+    ax.plot([0, 0], [0, 0], [-5, D], color='black', ls=':', lw=1.0)
+
+    sc_pts = [
+        (0.0, 0.0, 20.0, 'red',     r'$s_0$'),
+        (5.0, 3.0, 20.0, 'cyan',    r'$s_1$'),
+        (0.0, 8.0, 25.0, 'orange',  r'$s_2$'),
+    ]
+    for sx, sy, sz, color, lbl in sc_pts:
+        ax.scatter([sx], [sy], [sz], c=color, s=160, edgecolor='black',
+                   lw=1.0, depthshade=False)
+        ax.text(sx + 1.5, sy + 1.0, sz, lbl, fontsize=20, fontweight='bold')
+
+    ax.set_xlim(-L, L)
+    ax.set_ylim(-L, L)
+    ax.set_zlim(-7, D)
+    ax.invert_zaxis()
+    ax.set_xlabel('x (mm)', fontsize=18, labelpad=6)
+    ax.set_ylabel('y (mm)', fontsize=18, labelpad=6)
+    ax.set_zlabel('z (mm)', fontsize=18, labelpad=6)
+    ax.tick_params(labelsize=15)
+    ax.view_init(elev=18, azim=-58)
+    try:
+        ax.set_box_aspect((1.0, 1.0, 1.0))
+    except Exception:
+        pass
+
+
+def radon_pipeline_figure(volumes_by_N, out_path, z0_target_mm=20.0):
+    """Five-panel figure for the report (letters only, no subplot titles):
+         (a) 3D scan-geometry schematic
+         (b) cropped TFM slices at θ = 0°, 60°, 120°
+         (c) sinogram at depth z0
+         (d) inverse-Radon reconstruction at z0
+         (e) MIPs of the stacked-per-depth reconstructed volume
+    Reads the cached complex B-scans written by test_radon_validation.py
+    and the per-N reconstructed volumes built in main()."""
     bscans_path = OUTPUT_DIR / 'bscans_complex.npy'
     angles_path = OUTPUT_DIR / 'angles_rad.npy'
     if not (bscans_path.exists() and angles_path.exists()):
         print(f"Skipping pipeline figure; missing cache in {OUTPUT_DIR}")
         return
+    if not volumes_by_N:
+        print("Skipping pipeline figure; no reconstructed volumes provided")
+        return
 
     bscans = np.abs(np.load(bscans_path)).astype(np.float32)   # (n_ang, n_z, n_x)
     angles = np.load(angles_path)
-    z_mm, xy_mm, _ = axes_mm()
+    z_mm, xy_mm, half_mm = axes_mm()
 
     iz0 = int(np.argmin(np.abs(z_mm - z0_target_mm)))
     z0  = float(z_mm[iz0])
 
-    # Scatterers within ~2 mm of the chosen depth (these show up at this slice)
     at_z0 = [(sx * 1e3, sy * 1e3, sz * 1e3) for sx, sy, sz, _ in SCATTERERS
              if abs(sz * 1e3 - z0) < 2.0]
 
-    # Angles closest to 0, 45, 90, 135 deg
-    target_deg = [0.0, 45.0, 90.0, 135.0]
+    target_deg = [0.0, 60.0, 120.0]
     sel_idx = [int(np.argmin(np.abs(np.degrees(angles) - t))) for t in target_deg]
 
-    fig = plt.figure(figsize=(15, 9))
-    gs = fig.add_gridspec(2, 4, height_ratios=[1.0, 1.25],
-                          hspace=0.45, wspace=0.4)
+    N_best = max(volumes_by_N.keys())
+    volume = volumes_by_N[N_best]
 
-    # ---- (a) TFM slices at selected angles ----
-    for k, i in enumerate(sel_idx):
-        ax = fig.add_subplot(gs[0, k])
-        img = bscans[i]
-        img_db = _to_db(img, float(img.max()))
-        ax.imshow(img_db,
-                  extent=[xy_mm[0], xy_mm[-1], z_mm[-1], z_mm[0]],
-                  origin='upper', cmap='gray',
-                  vmin=DB_FLOOR, vmax=0.0, aspect='auto')
-        ax.axhline(z0, color='yellow', ls='--', lw=0.9, alpha=0.9)
-        ax.set_xlabel(r'$x_\theta$ (mm)')
-        if k == 0:
-            ax.set_ylabel('z (mm)')
-        ax.set_title(r'$\theta$ = ' + f'{np.degrees(angles[i]):.0f}' + r'$\degree$',
-                     fontsize=10)
-    fig.text(0.5, 0.965,
-             '(a)  TFM slices, one per scan angle '
-             '(yellow dashed line = depth $z_0$ sampled for sinogram)',
-             ha='center', fontsize=12, fontweight='bold')
+    cxy = 15.0                # ±mm in-plane crop for (b), (d), (e)
+    cz_lo, cz_hi = 14.0, 30.0 # z crop (mm) for (b), (e)
 
-    # ---- (b) Sinogram at z0 ----
-    ax_b = fig.add_subplot(gs[1, 0:2])
+    AX, TICK, LET, LEG = 20, 17, 28, 16
+
+    fig = plt.figure(figsize=(22, 14))
+    gs = fig.add_gridspec(2, 15, height_ratios=[1.0, 1.0],
+                          hspace=0.28, wspace=0.55,
+                          left=0.05, right=0.92, top=0.96, bottom=0.06)
+
+    # ---- (a) 3D geometry schematic ----
+    ax_a = fig.add_subplot(gs[0, 0:6], projection='3d')
+    _draw_geometry_schematic(ax_a)
+    ax_a.text2D(-0.05, 1.02, '(a)', transform=ax_a.transAxes,
+                fontsize=LET, fontweight='bold', va='top')
+
+    # ---- (b) Cropped TFM slices at θ = 0°, 60°, 120° ----
     sino = bscans[:, iz0, :]                                   # (n_ang, n_x)
+    for k, i in enumerate(sel_idx):
+        ax = fig.add_subplot(gs[0, 6 + 3 * k:6 + 3 * (k + 1)])
+        img_db = _to_db(bscans[i], float(bscans[i].max()))
+        ax.imshow(img_db, extent=[xy_mm[0], xy_mm[-1], z_mm[-1], z_mm[0]],
+                  origin='upper', cmap='gray', vmin=DB_FLOOR, vmax=0.0,
+                  aspect='auto')
+        ax.axhline(z0, color='yellow', ls='--', lw=1.0, alpha=0.95)
+        ax.set_xlim(-cxy, cxy)
+        ax.set_ylim(cz_hi, cz_lo)
+        ax.set_xlabel(r'$x_\theta$ (mm)', fontsize=AX)
+        ax.tick_params(labelsize=TICK)
+        if k == 0:
+            ax.set_ylabel('z (mm)', fontsize=AX)
+            ax.text(-0.30, 1.0, '(b)', transform=ax.transAxes,
+                    fontsize=LET, fontweight='bold', va='top')
+        ax.text(0.5, 0.97,
+                fr'$\theta = {np.degrees(angles[i]):.0f}\degree$',
+                transform=ax.transAxes, color='white', ha='center', va='top',
+                fontsize=AX, fontweight='bold',
+                bbox=dict(facecolor='black', alpha=0.5,
+                          edgecolor='none', pad=2))
+        for sx, sy, _sz in at_z0:
+            xth = sx * np.cos(angles[i]) + sy * np.sin(angles[i])
+            on_axis = (sx == 0.0 and sy == 0.0)
+            color = 'red' if on_axis else 'cyan'
+            ax.plot(xth, z0, marker='o', mfc='none', mec=color,
+                    mew=1.8, ms=14, alpha=0.95)
+            if k == 0:
+                lbl = r'$s_0$' if on_axis else r'$s_1$'
+                ax.annotate(lbl, xy=(xth, z0),
+                            xytext=(xth + 4, z0 - 3),
+                            color=color, fontsize=AX, fontweight='bold',
+                            arrowprops=dict(arrowstyle='->', color=color, lw=1.0))
+
+    # ---- (c) Sinogram at z0 ----
+    ax_c = fig.add_subplot(gs[1, 0:7])
     sino_db = _to_db(sino, float(sino.max()))
     ang_deg = np.degrees(angles)
-    ax_b.imshow(sino_db.T,
+    ax_c.imshow(sino_db.T,
                 extent=[ang_deg[0], ang_deg[-1], xy_mm[0], xy_mm[-1]],
-                origin='lower', cmap='gray',
-                vmin=DB_FLOOR, vmax=0.0, aspect='auto')
+                origin='lower', cmap='gray', vmin=DB_FLOOR, vmax=0.0,
+                aspect='auto')
     theta_smooth = np.linspace(0.0, np.pi, 400)
-    trace_colors = ['tab:red', 'tab:cyan', 'tab:orange']
+    trace_colors = ['red', 'cyan', 'orange']
     for c, (sx, sy, _sz) in enumerate(at_z0):
         rho = sx * np.cos(theta_smooth) + sy * np.sin(theta_smooth)
-        ax_b.plot(np.degrees(theta_smooth), rho,
-                  color=trace_colors[c % len(trace_colors)], lw=1.4,
-                  label=f'(x, y) = ({sx:+.0f}, {sy:+.0f}) mm')
-    ax_b.set_xlabel(r'$\theta$ (deg)')
-    ax_b.set_ylabel(r'$x_\theta$ (mm)')
-    ax_b.set_title(f'(b)  Sinogram at $z_0$ = {z0:.1f} mm  '
-                   r'(traces: $x_\theta = x\cos\theta + y\sin\theta$)',
-                   fontsize=12, fontweight='bold')
-    ax_b.legend(loc='upper right', fontsize=9)
+        ax_c.plot(np.degrees(theta_smooth), rho,
+                  color=trace_colors[c % len(trace_colors)], lw=1.8,
+                  label=fr'$(x, y) = ({sx:+.0f}, {sy:+.0f})$ mm')
+    ax_c.set_xlabel(r'$\theta$ (deg)', fontsize=AX)
+    ax_c.set_ylabel(r'$x_\theta$ (mm)', fontsize=AX)
+    ax_c.tick_params(labelsize=TICK)
+    ax_c.legend(loc='upper right', fontsize=LEG, framealpha=0.85)
+    ax_c.text(-0.07, 1.02, '(c)', transform=ax_c.transAxes,
+              fontsize=LET, fontweight='bold', va='top')
 
-    # ---- (c) Reconstructed slice at z0 ----
-    ax_c = fig.add_subplot(gs[1, 2:4])
-    recon = iradon(sino.T, theta=ang_deg, filter_name='ramp',
-                   circle=True, output_size=sino.shape[1])
-    recon = recon[::-1, :]
-    recon_db = _to_db(recon, float(recon.max()))
-    ax_c.imshow(recon_db,
-                extent=[xy_mm[0], xy_mm[-1], xy_mm[0], xy_mm[-1]],
-                origin='lower', cmap='gray',
-                vmin=DB_FLOOR, vmax=0.0, aspect='equal')
-    ax_c.set_xlabel('x (mm)')
-    ax_c.set_ylabel('y (mm)')
-    ax_c.set_title(f'(c)  Inverse-Radon reconstruction at $z_0$ = {z0:.1f} mm',
-                   fontsize=12, fontweight='bold')
+    # ---- (d) Reconstructed-volume 3D scatter (matches (a) framing) ----
+    import matplotlib as mpl
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-    fig.savefig(out_path, dpi=150, bbox_inches='tight')
+    ref = float(volume.max())
+    db_vol = _to_db(volume, ref)
+
+    db_floor_e = -12.0  # tighter floor → cleaner blobs in 3D
+    mask = db_vol > db_floor_e
+    iz, iy, ix = np.where(mask)
+    vals = db_vol[mask]
+    xs = xy_mm[ix]; ys = xy_mm[iy]; zs = z_mm[iz]
+
+    order = np.argsort(vals)  # plot brightest last so they stay on top
+    xs, ys, zs, vals = xs[order], ys[order], zs[order], vals[order]
+
+    normed = np.clip((vals - db_floor_e) / (-db_floor_e), 0.0, 1.0)
+    rgba = plt.get_cmap('viridis')(normed)
+    rgba[:, 3] = 0.35 + 0.65 * normed
+
+    ax_d = fig.add_subplot(gs[1, 7:14], projection='3d')
+
+    L_d, D_d = 18.0, 35.0
+    box_pts = np.array([
+        [-L_d, -L_d, 0], [+L_d, -L_d, 0], [+L_d, +L_d, 0], [-L_d, +L_d, 0],
+        [-L_d, -L_d, D_d], [+L_d, -L_d, D_d], [+L_d, +L_d, D_d], [-L_d, +L_d, D_d],
+    ])
+    box_edges = [(0, 1), (1, 2), (2, 3), (3, 0),
+                 (4, 5), (5, 6), (6, 7), (7, 4),
+                 (0, 4), (1, 5), (2, 6), (3, 7)]
+    for a, b in box_edges:
+        ex, ey, ez = zip(box_pts[a], box_pts[b])
+        ax_d.plot(ex, ey, ez, color='gray', lw=0.6, alpha=0.6)
+    ax_d.add_collection3d(Poly3DCollection(
+        [[box_pts[0], box_pts[1], box_pts[2], box_pts[3]]],
+        facecolor='lightblue', alpha=0.12, edgecolor='gray', lw=0.5))
+
+    ax_d.scatter(xs, ys, zs, c=rgba, s=40 + 60 * normed, marker='o',
+                 edgecolors='none', depthshade=False)
+
+    ax_d.set_xlim(-L_d, L_d)
+    ax_d.set_ylim(-L_d, L_d)
+    ax_d.set_zlim(-7, D_d)
+    ax_d.invert_zaxis()
+    ax_d.set_xlabel('x (mm)', fontsize=AX, labelpad=6)
+    ax_d.set_ylabel('y (mm)', fontsize=AX, labelpad=6)
+    ax_d.set_zlabel('z (mm)', fontsize=AX, labelpad=6)
+    ax_d.tick_params(labelsize=TICK)
+    ax_d.view_init(elev=18, azim=-58)
+    try:
+        ax_d.set_box_aspect((1.0, 1.0, 1.0))
+    except Exception:
+        pass
+    ax_d.text2D(-0.02, 1.05, '(d)', transform=ax_d.transAxes,
+                fontsize=LET, fontweight='bold', va='top')
+
+    ax_cb = fig.add_subplot(gs[1, 14:15])
+    sm = mpl.cm.ScalarMappable(
+        norm=mpl.colors.Normalize(vmin=db_floor_e, vmax=0.0), cmap='viridis')
+    sm.set_array([])
+    cb = fig.colorbar(sm, cax=ax_cb)
+    cb.set_label('amplitude (dB re max)', fontsize=AX)
+    cb.ax.tick_params(labelsize=TICK)
+
+    fig.savefig(out_path, dpi=150)
     plt.close(fig)
 
 
@@ -338,7 +500,7 @@ def main() -> None:
     print(f"Wrote {out}")
 
     out = OUTPUT_DIR / 'radon_pipeline.png'
-    radon_pipeline_figure(out)
+    radon_pipeline_figure(volumes_by_N, out)
     print(f"Wrote {out}")
 
 

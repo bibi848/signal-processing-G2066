@@ -136,19 +136,22 @@ def render_cube(ax, vol, title):
     ax.set_xlim(0, L)
     ax.set_ylim(0, L)
     ax.set_zlim(0, L)
-    ax.set_xlabel('x (mm)', labelpad=-2)
-    ax.set_ylabel('y (mm)', labelpad=-2)
-    ax.set_zlabel('z (mm)', labelpad=-2)
+    # Inner ticks only on x/y so the front corner (x=L meets y=0) doesn't overlap
+    inner_ticks = [0.5, 1.0, 1.5, 2.0, 2.5]
+    ax.set_xticks(inner_ticks)
+    ax.set_yticks(inner_ticks)
+    ax.set_xlabel('x (mm)', labelpad=6, fontsize=18)
+    ax.set_ylabel('y (mm)', labelpad=6, fontsize=18)
+    ax.set_zlabel('z (mm)', labelpad=6, fontsize=18)
     ax.set_box_aspect((1, 1, 1))
     ax.view_init(elev=22, azim=-55)
-    ax.set_title(title, fontsize=13, pad=10)
+    ax.set_title(title, fontsize=20, pad=12)
 
-    # Clean up tick labels for a report-quality look
-    ax.tick_params(axis='both', which='major', labelsize=8, pad=-2)
+    ax.tick_params(axis='both', which='major', labelsize=15, pad=0)
     return cmap, norm
 
 
-fig = plt.figure(figsize=(13, 6.5))
+fig = plt.figure(figsize=(11, 5.5))
 
 ax1 = fig.add_subplot(1, 2, 1, projection='3d')
 cmap, norm = render_cube(ax1, voronoi_vol, 'Voronoi Tessellation')
@@ -157,19 +160,13 @@ ax2 = fig.add_subplot(1, 2, 2, projection='3d')
 render_cube(ax2, gauss_vol, 'Gaussian Smoothing')
 
 # Shared colourbar
-cax = fig.add_axes([0.35, 0.07, 0.32, 0.025])
+cax = fig.add_axes([0.35, 0.06, 0.32, 0.028])
 sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
 sm.set_array([])
 cb = fig.colorbar(sm, cax=cax, orientation='horizontal')
-cb.set_label(r'Relative impedance perturbation $\Delta Z / Z_0$', fontsize=10)
-cb.ax.tick_params(labelsize=8)
+cb.set_label(r'Relative impedance perturbation $\Delta Z / Z_0$', fontsize=17)
+cb.ax.tick_params(labelsize=14)
 
-fig.suptitle(
-    f'3D Microstructure Models — Aluminium 6061-T6  '
-    f'(median grain ∅ = {GRAIN_MEDIAN_UM:.0f} µm)',
-    fontsize=14, y=0.97,
-)
-
-plt.subplots_adjust(left=0.02, right=0.98, top=0.90, bottom=0.14, wspace=0.05)
+plt.subplots_adjust(left=0.02, right=0.98, top=0.97, bottom=0.16, wspace=0.05)
 plt.savefig(OUTPUT, dpi=220, bbox_inches='tight')
 print(f"\nSaved → {OUTPUT}")
