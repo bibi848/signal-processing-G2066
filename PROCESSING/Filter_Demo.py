@@ -1,4 +1,5 @@
 '''
+Author: OD
 This script shows how the filtering is being done on the data. 
 '''
 
@@ -21,7 +22,6 @@ if str(root_path) not in sys.path:
 from scipy.signal.windows import tukey
 from Classes.Filter import filter_signal
 
-# Point the script to the correct subfolder.
 raw_data_type       = '1D Raw Data'
 raw_data_name       = 'Al Hole 5MHz 02022026'
 processed_data_type = '1D Processed Data'
@@ -34,7 +34,6 @@ filter_alpha = 0.2
 MHz_percentage  = 0.2 # percentage
 hanning_bool = False
 
-# Input and Output paths.
 IN_DIR  = os.path.join(cwd, 'DATA', raw_data_type, raw_data_name)
 OUT_DIR = os.path.join(cwd, 'DATA', processed_data_type, raw_data_name)
 
@@ -254,7 +253,6 @@ ax[0].set_xlabel("Time [s]")
 ax[0].set_ylabel("Amplitude")
 ax[0].set_title("Time Domain")
 ax[0].grid(True)
-# ax[0].legend(loc='upper right')
 ax[0].legend()
 
 # Frequency-domain overlay
@@ -292,5 +290,4 @@ plt.tight_layout()
 if save_fig:
     plt.savefig("Images/hilbert_envelope_signal_defect.png", dpi=300, bbox_inches="tight")
 plt.show()
-
 #%%

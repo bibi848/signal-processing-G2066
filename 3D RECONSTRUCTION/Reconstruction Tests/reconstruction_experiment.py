@@ -1,4 +1,5 @@
 '''
+Author: OD
 This script investigates the difficulties of reconstructing 3D volumes from 2D images taken with ultrasonic arrays. 
 Prior to trying with microstructural backscatter, it is tried with 3D white on black volumes.
 '''
@@ -80,10 +81,9 @@ X = np.transpose(X, (2, 0, 1))
 Y = np.transpose(Y, (2, 0, 1))
 Z = np.transpose(Z, (2, 0, 1))
 
-# Create empty volume
+# Empty volume
 volume = np.zeros((nz, ny, nx), dtype=np.uint8)
 
-# Add spheres
 for sphere in sphere_coordinates:
     sx, sy, sz, r = sphere
     mask = (X - sx)**2 + (Y - sy)**2 + (Z - sz)**2 <= r**2
@@ -98,7 +98,6 @@ cy2, cz2, r2 = cylinder_coordinates2
 cylinder2_mask = (Y - cy2)**2 + (Z - cz2)**2 <= r2**2
 volume[cylinder2_mask] = 255
 
-# Save volume
 output_filename = 'ground_truth_cube.npy'
 np.save(output_filename, volume)
 
@@ -113,34 +112,22 @@ napari.run()
 def extract_rotated_slice(volume, theta_deg, array_length_mm, block_length_mm, block_height_mm):
 
     nz, ny, nx = volume.shape
-
-    # Physical coordinate grids in mm
-    x_coords = np.linspace(0, block_length_mm, nx)
-    y_coords = np.linspace(0, block_length_mm, ny)
-    z_coords = np.linspace(0, block_height_mm, nz)
-
-    # Centre of the block
     x_c = block_length_mm / 2
     y_c = block_length_mm / 2
 
-    # Parameter along the array line
     n_line_samples = nx
     s = np.linspace(-array_length_mm / 2, array_length_mm / 2, n_line_samples)
 
     theta = np.deg2rad(theta_deg)
 
-    # Rotated line in x-y
     x_line = x_c + s * np.cos(theta)
     y_line = y_c + s * np.sin(theta)
 
-    # Convert physical coordinates to nearest pixel indices
     x_idx = np.round((x_line / block_length_mm) * (nx - 1)).astype(int)
     y_idx = np.round((y_line / block_length_mm) * (ny - 1)).astype(int)
 
-    # Valid points that lie inside the volume
     valid = (x_idx >= 0) & (x_idx < nx) & (y_idx >= 0) & (y_idx < ny)
 
-    # Build slice
     slice_2d = np.zeros((nz, n_line_samples), dtype=volume.dtype)
 
     for i in range(n_line_samples):
@@ -148,7 +135,6 @@ def extract_rotated_slice(volume, theta_deg, array_length_mm, block_length_mm, b
             slice_2d[:, i] = volume[:, y_idx[i], x_idx[i]]
 
     return slice_2d
-
 
 angles_deg = np.arange(0, 180, rotational_angle_deg)
 output_dir = Path(__file__).parent / 'slices'
@@ -186,7 +172,6 @@ def reconstruct_volume_from_rotated_slices(all_slices, angles_deg,
     # Physical coordinates of output grid
     x = np.linspace(0, block_length_mm, nx)
     y = np.linspace(0, block_length_mm, ny)
-    z = np.linspace(0, block_height_mm, nz)
 
     x_c = block_length_mm / 2
     y_c = block_length_mm / 2
@@ -257,7 +242,6 @@ napari.run()
 
 #%%
 # Experimental Data
-
 data_path = Path('../../DATA/1D TFM Data/Al Hole 5MHz 02022026 Filtered')
 png_files = sorted(data_path.glob('*.png'))
 

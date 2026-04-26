@@ -1,4 +1,5 @@
 '''
+Author: OD
 This script converts the files processed previously into TFM images. 
 '''
 

@@ -1,3 +1,7 @@
+'''
+Author: OD
+'''
+
 #%%
 # Importing Functions and Defining Correct Path
 import matplotlib.pyplot as plt
@@ -14,7 +18,6 @@ if str(root_path) not in sys.path:
 
 from Classes.CalcSpeedOfSound import calcSpeedOfSound
 
-# Point the script to the correct subfolder.
 in_data_type = '2D Processed Data'
 in_data_name = 'Cu Pure 7.5MHz Ex 15042026'
 cwd          = Path.cwd().parent
@@ -28,13 +31,11 @@ elements            = [10, 15, 20]
 calculation_type    = 'interp'
 savePicBool         = False
 
-# Input and Output paths.
 if filter_data:
     IN_DIR = os.path.join(cwd, 'DATA', in_data_type, (in_data_name + ' Filtered'))
 else:
     IN_DIR  = os.path.join(cwd, 'DATA', in_data_type, in_data_name)
 
-# Find all files in directory which are . files. 
 data_folders = sorted([
     p.name for p in Path(IN_DIR).iterdir()
     if p.is_dir()
@@ -53,7 +54,6 @@ print()
 
 #%%
 # Extracting speed of sound from data
-
 speed_sound_list = []
 
 for folder in data_folders:

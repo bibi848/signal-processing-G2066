@@ -1,4 +1,5 @@
 '''
+Author: OD
 This script allows you to view the .npy files collected from 2D array scanning. 
 It uses the library napari for viewing. 
 

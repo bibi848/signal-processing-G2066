@@ -1,3 +1,7 @@
+'''
+Author: OD
+'''
+
 from scipy.signal.windows import tukey
 import numpy as np
 
