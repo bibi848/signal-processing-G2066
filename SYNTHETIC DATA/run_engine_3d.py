@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Born-only 3D NDT synthetic data engine — driver.
 

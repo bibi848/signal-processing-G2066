@@ -1,5 +1,5 @@
 """
-Quick napari viewer for reconstructed 3D volumes.
+Napari viewer for reconstructed 3D volumes.
 
 Usage:
     python view_volumes.py VOL1.npy [VOL2.npy ...]

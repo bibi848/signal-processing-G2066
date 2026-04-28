@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 2D matrix-array entry point for the 3D Born FMC engine.
 

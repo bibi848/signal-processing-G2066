@@ -9,8 +9,6 @@ For each overlap fraction in OVERLAPS:
        array sees a region offset by `shift` relative to scan A.
     4. Save FMC, TFM volume, grain volume, and meta.json per pair.
 
-    overlap_fraction = 1.0  → shift = 0           (identical scans)
-    overlap_fraction = 0.0  → shift = aperture_x  (adjacent, non-overlapping)
 """
 
 import json
